@@ -3,6 +3,7 @@ use crate::message;
 use crate::usi;
 use crate::usi::UsiCommand;
 
+#[derive(Debug)]
 pub struct AdpInitializeRequest {    
     band: u8
 }

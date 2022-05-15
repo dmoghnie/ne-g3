@@ -4,15 +4,16 @@ mod message;
 mod common;
 mod crc;
 mod request;
+mod app;
 
 use std::{env, io, str, thread};
 use std::time::Duration;
 
 use bytes::BytesMut;
+use flume::{Sender, Receiver};
 
 use std::io::{Read, Result as IoResult, Write};
-use crossbeam_channel::{bounded, Sender};
-
+// use crossbeam_channel::{bounded, Sender};
 
 #[cfg(unix)]
 const DEFAULT_TTY: &str = "/dev/tty.usbserial-0001";
@@ -24,13 +25,14 @@ extern crate env_logger;
 
 use log::Level;
 
-use crate::usi::UsiSender;
+use crate::usi::{UsiSender, UsiCommand, MessageType};
 
 
 
 
 fn main() {
-    let (adp_msg_sender, adp_msg_receiver) = bounded(100);
+    // let (tx, rx) = flume::unbounded();
+    // let (adp_msg_sender, adp_msg_receiver) = bounded(100);
 
     env_logger::init();
     info!("Starting ...");
@@ -41,41 +43,83 @@ fn main() {
     .timeout(Duration::from_millis(10))
     .open().expect("Failed to open port");
 
-    let mut usi_port = usi::Port::new(Box::new(port));    
-
-    let request = request::AdpInitializeRequest::from_band(message::TAdpBand::ADP_BAND_CENELEC_A);
-    match usi_port.send (&request.try_into().unwrap()){
-        Ok(size) => {
-            trace!("sent cmd result ok {}", size)
-        },
-        Err(e) => {
-            warn!("Failed to send cmd {}", e)
-        }
-    };
-    // let listener = Box::new(Listener()) as Box<dyn MessageListener>;
-    let handle = thread::spawn (move || {
+    let (app_tx, app_rx) = flume::unbounded::<(MessageType)>();
+    let (usi_tx, usi_rx) = flume::unbounded::<MessageType>();
+        
+    // let request = request::AdpInitializeRequest::from_band(message::TAdpBand::ADP_BAND_CENELEC_A);
+    let sender = app_tx.clone();
+    let t = thread::spawn(move || {
+        let mut usi_port = usi::Port::new(Box::new(port));
+        usi_port.add_listener (sender);
         loop {
-            // device.process(&mut port, &listener);
-            usi_port.process(Some(adp_msg_sender.clone()));
-    
+            usi_port.process();
+            match usi_rx.recv_timeout(usi::RECEIVE_TIMEOUT) {
+                Ok(msg) => {
+                    match msg {
+                        MessageType::UsiCommand(cmd) => {
+                            usi_port.send(&cmd);
+                        },
+                        _=> {
+
+                        }
+                    }
+                },
+                Err(e) =>{
+
+                }
+            }
         }
+
     });
 
-    let receiver = thread::spawn(move || {
+    let cmd_tx = usi_tx.clone();
+    let t2 = thread::spawn(move || {
+        let mut app = app::App::new(&cmd_tx);
         loop {
-            let msg = adp_msg_receiver.recv();
-            match msg {
+            match app_rx.recv() {
                 Ok(msg) => {
-                    let m = message::usi_message_to_message (&msg);
-                    log::trace!("Receiver received {:?}", m);
+                    app.process_msg (&msg);
                 },
                 Err(e) => {
-                    log::warn!("Error receiving message");
+
                 }
             }
         }
     });
+
+    t.join().unwrap();
+    // match usi_port.send (&request.try_into().unwrap()){
+    //     Ok(size) => {
+    //         trace!("sent cmd");
+    //     },
+    //     Err(e) => {
+    //         warn!("Failed to send cmd {}", e);
+    //     }
+    // };
+    // // let listener = Box::new(Listener()) as Box<dyn MessageListener>;
+    // let handle = thread::spawn (move || {
+    //     loop {
+    //         // device.process(&mut port, &listener);
+    //         usi_port.process(Some(&tx));
     
-    handle.join().unwrap();
+    //     }
+    // });
+
+    // let receiver = thread::spawn(move || {
+    //     loop {
+    //         let msg = rx.recv();
+    //         match msg {
+    //             Ok(msg) => {
+    //                 let m = message::usi_message_to_message (&msg);
+    //                 log::trace!("Receiver received {:?}", m);
+    //             },
+    //             Err(e) => {
+    //                 log::warn!("Error receiving message");
+    //             }
+    //         }
+    //     }
+    // });
+    
+    // handle.join().unwrap();
 
 }

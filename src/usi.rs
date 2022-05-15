@@ -5,7 +5,7 @@ use std::{
     collections::VecDeque,
     io::{Read, Write},
     ops::Index,
-    os::unix::thread,
+    thread::{self, JoinHandle}, time::Duration,
 };
 
 use crate::common;
@@ -13,8 +13,17 @@ use crate::crc;
 use crate::usi;
 
 use crate::message;
-use crossbeam_channel::{bounded, Sender};
+// use crossbeam_channel::{bounded, Sender};
 use std::thread::spawn;
+//use std::sync::mpsc::{Sender, channel};
+
+//TODO, this is a half duplex implementation, one thread for rx/tx.
+//When receiving, we timeout in x time and check the incoming channel for pending requests
+
+pub enum MessageType {
+    UsiMessage(UsiMessage),
+    UsiCommand(UsiCommand),
+}
 
 #[derive(Clone)]
 enum RxState {
@@ -25,36 +34,41 @@ enum RxState {
     RxDone,
 }
 
+pub const RECEIVE_TIMEOUT:Duration = Duration::from_millis(10);
+
 pub struct UsiCommand {
-    protocol: u8,    
-    data: Vec<u8>
+    protocol: u8,
+    data: Vec<u8>,
 }
 
 impl UsiCommand {
-    pub fn new(protocol: u8, data: &Vec<u8>) -> UsiCommand{
+    pub fn new(protocol: u8, data: &Vec<u8>) -> UsiCommand {
         UsiCommand {
             protocol: protocol,
-            data: data.to_vec()
+            data: data.to_vec(),
         }
     }
-    pub fn to_usi (&self)->Option<Vec<u8>> {
-        let mut v:Vec<u8> = Vec::with_capacity(1024); //TODO define those limits
-        //Header is 2 bytes
-        //Cmd is first byte in the data
-        //in case of prime, the cmd byte when serializing contains the ex len
+    pub fn to_usi(&self) -> Option<Vec<u8>> {
+        let mut v: Vec<u8> = Vec::with_capacity(1024); //TODO define those limits
+                                                       //Header is 2 bytes
+                                                       //Cmd is first byte in the data
+                                                       //in case of prime, the cmd byte when serializing contains the ex len
 
-        if self.data.len() > 2048 { //TODO set const
+        if self.data.len() > 2048 {
+            //TODO set const
             return None;
-        } 
+        }
         v.push(common::LEN_HI_PROTOCOL(self.data.len() as u16));
-        v.push(common::LEN_LO_PROTOCOL(self.data.len() as u16) + common::TYPE_PROTOCOL(self.protocol));
-        
-        
+        v.push(
+            common::LEN_LO_PROTOCOL(self.data.len() as u16) + common::TYPE_PROTOCOL(self.protocol),
+        );
+
         if let Some(cmd) = self.data.get(0) {
             if self.protocol == common::PROTOCOL_PRIME_API {
-                v.push(common::LEN_EX_PROTOCOL(self.data.len() as u16) + common::CMD_PROTOCOL(*cmd));
-            }            
-            else {
+                v.push(
+                    common::LEN_EX_PROTOCOL(self.data.len() as u16) + common::CMD_PROTOCOL(*cmd),
+                );
+            } else {
                 v.push(*cmd);
             }
         }
@@ -62,55 +76,52 @@ impl UsiCommand {
             v.push(*ch);
         }
         // Calculate CRC
-	match self.protocol
-	{
-		common::MNGP_PRIME_GETQRY |
-		common:: MNGP_PRIME_GETRSP |
-		common::MNGP_PRIME_SET |
-		common::MNGP_PRIME_RESET |
-		common::MNGP_PRIME_REBOOT |
-		common::MNGP_PRIME_FU |
-        common::MNGP_PRIME_EN_PIBQRY => {
-			let crc = crc::evalCrc32 (&v);
-            v.push((crc >> 24) as u8);
-            v.push((crc >> 16) as u8);
-            v.push((crc >> 8) as u8);
-            v.push(crc as u8);
-        },
+        match self.protocol {
+            common::MNGP_PRIME_GETQRY
+            | common::MNGP_PRIME_GETRSP
+            | common::MNGP_PRIME_SET
+            | common::MNGP_PRIME_RESET
+            | common::MNGP_PRIME_REBOOT
+            | common::MNGP_PRIME_FU
+            | common::MNGP_PRIME_EN_PIBQRY => {
+                let crc = crc::evalCrc32(&v);
+                v.push((crc >> 24) as u8);
+                v.push((crc >> 16) as u8);
+                v.push((crc >> 8) as u8);
+                v.push(crc as u8);
+            }
 
-        common::PROTOCOL_SNIF_PRIME|
-        common::PROTOCOL_SNIF_G3|
-        common::PROTOCOL_MAC_G3|
-        common::PROTOCOL_ADP_G3|
-        common::PROTOCOL_COORD_G3 => {
-            let crc = crc::evalCrc16 (&v);
-            v.push((crc >> 8) as u8);
-            v.push(crc as u8);
-        },
+            common::PROTOCOL_SNIF_PRIME
+            | common::PROTOCOL_SNIF_G3
+            | common::PROTOCOL_MAC_G3
+            | common::PROTOCOL_ADP_G3
+            | common::PROTOCOL_COORD_G3 => {
+                let crc = crc::evalCrc16(&v);
+                v.push((crc >> 8) as u8);
+                v.push(crc as u8);
+            }
 
-        common::PROTOCOL_PRIME_API=> {
-            let crc = crc::evalCrc8(&v);
-            v.push(crc as u8);
+            common::PROTOCOL_PRIME_API => {
+                let crc = crc::evalCrc8(&v);
+                v.push(crc as u8);
+            }
+            common::PROTOCOL_PRIMEoUDP => {
+                let crc = crc::evalCrc16(&v);
+                v.push((crc >> 8) as u8);
+                v.push(crc as u8);
+            }
 
-        },
-        common::PROTOCOL_PRIMEoUDP => {
-            let crc = crc::evalCrc16 (&v);
-            v.push((crc >> 8) as u8);
-            v.push(crc as u8);
-        },
-
-        _ => {
-            let crc = crc::evalCrc8(&v);
-            v.push(crc as u8);
+            _ => {
+                let crc = crc::evalCrc8(&v);
+                v.push(crc as u8);
+            }
         }
-	}
-        let mut r:Vec<u8> = Vec::with_capacity(2048);
-        for ch in v{ 
+        let mut r: Vec<u8> = Vec::with_capacity(2048);
+        for ch in v {
             if ch == common::MSGMARK || ch == common::ESCMARK {
                 r.push(common::ESCMARK);
-                r.push (ch ^ 0x20);
-            }
-            else {
+                r.push(ch ^ 0x20);
+            } else {
                 r.push(ch);
             }
         }
@@ -121,7 +132,7 @@ impl UsiCommand {
 }
 
 pub trait UsiSender {
-    fn send (&mut self, cmd: &UsiCommand) -> std::result::Result<usize, String>;
+    fn send(&mut self, cmd: &UsiCommand) -> std::result::Result<(), String>;
 }
 
 #[derive(Clone)]
@@ -244,7 +255,7 @@ impl UsiMessage {
         None
     }
     fn process_ch(&mut self, ch: u8) {
-        trace!("usi::process_ch {}", ch);
+        // trace!("usi::process_ch {}", ch);
         match self.rxState {
             RxState::RxIdle => {
                 if ch == common::PROTOCOL_DELIMITER {
@@ -289,70 +300,90 @@ impl UsiMessage {
     }
 }
 
-pub struct Port<T> {
-    message: usi::UsiMessage,
-    buf: VecDeque<u8>,
-    channel: T,
+#[derive(PartialEq, Debug)]
+pub enum PortState {
+    Stopped,
+    Starting,
+    Started,
+    Stopping,
 }
 
-impl<T: Read + Write + Send> Port<T> {
-    pub fn new(channel: T) -> Port<T> {
+pub struct Port<'a, T> {
+    message: usi::UsiMessage,
+    buf: VecDeque<u8>,
+    channel: T,    
+    state: &'a PortState,
+    listeners: Vec<flume::Sender<MessageType>>
+}
+
+//thread object should be static, makes sense! Since threads may live for the duration of the program
+impl<'a, T: Read + Write + Send> Port<'a, T> where 'a: 'static, T:'static { 
+    pub fn new(channel: T) -> Port<'a, T> {
         Port {
             message: usi::UsiMessage::new(),
             buf: VecDeque::with_capacity(2048),
-            channel: channel,
+            channel: channel,                    
+            state: &PortState::Stopped,
+            listeners: Vec::new()
         }
     }
-    // pub fn process<T>(&mut self, port: &mut T, listener:&Box<dyn message::MessageListener>) -> Option<Vec<u8>>
-    pub fn process(&mut self, sender: Option<Sender<UsiMessage>>) {
-        loop {
-            let mut b = [0; 1000];
+    // pub fn post_cmd(&self, cmd: &'a MessageType) {
+    //     self.cmd_tx_rx.0.send(cmd);
+    // }
+    pub fn add_listener(&mut self, listener: flume::Sender<MessageType>) {
+        self.listeners.push (listener);
+    }    
 
-            match self.channel.read(&mut b) {
-                Ok(t) => {
-                    if t == 0 {
-                        continue;
-                    } else {
-                        trace!("usi received {} bytes", t);
-                    }
-                    for ch in &mut b[..t] {
-                        //TODO, push whole slice
-                        self.buf.push_back(*ch);
-                    }
-                    // self.buf.append(b[..t].to_vec());
-                    // let ch = b[0];
-                    // trace!("Received {}", ch);
-                    self.message.process(&mut self.buf);
-                    match self.message.get_state() {
-                        usi::RxState::RxDone => {
-                            if let Some(ref sender) = sender {
-                                sender.send(self.message.clone());
-                            }
-                            self.message = usi::UsiMessage::new();
-                        }
-                        usi::RxState::RxError => {
-                            log::warn!("Failed to parse message : RxError");
-                            self.message = usi::UsiMessage::new();
-                        }
-                        _ => {}
-                    }
+    // pub fn process<T>(&mut self, port: &mut T, listener:&Box<dyn message::MessageListener>) -> Option<Vec<u8>>
+    pub fn process(&mut self) {
+        let mut b = [0; 1000];
+
+        match self.channel.read(&mut b) {
+            Ok(t) => {
+                if t == 0 {
+                    return;
+                } else {
+                    trace!("usi received {} bytes", t);
                 }
-                Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => (),
-                Err(e) => {
-                    warn!("Error {}", e);
-                    break;
+                for ch in &mut b[..t] {
+                    //TODO, push whole slice
+                    self.buf.push_back(*ch);
                 }
+                // self.buf.append(b[..t].to_vec());
+                // let ch = b[0];
+                // trace!("Received {}", ch);
+                self.message.process(&mut self.buf);
+                match self.message.get_state() {
+                    usi::RxState::RxDone => {
+                        for listener in &self.listeners {
+                            listener.send(usi::MessageType::UsiMessage(self.message.clone()));
+                        }                        
+                        // if let Some(ref sender) = sender {
+                        //     sender.send(self.message.clone());
+                        // }
+                        self.message = usi::UsiMessage::new();
+                    }
+                    usi::RxState::RxError => {
+                        log::warn!("Failed to parse message : RxError");
+                        self.message = usi::UsiMessage::new();
+                    }
+                    _ => {}
+                }
+            }
+            Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => (),
+            Err(e) => {
+                warn!("Error {}", e);
             }
         }
     }
 }
 
-impl<T: Read + Write + Send> UsiSender for Port<T> {
-    fn send(&mut self, cmd: &UsiCommand) -> std::result::Result<usize, String> {
+impl<'a, T: Read + Write + Send> UsiSender for Port<'a, T> {
+    fn send(&mut self, cmd: &UsiCommand) -> std::result::Result<(), String> {
         if let Some(buf) = cmd.to_usi() {
             log::trace!("--> {}", common::to_hex_string(&buf));
-            match self.channel.write(&buf) {
-                Ok(len) => return Ok(len),
+            match self.channel.write_all(&buf) {
+                Ok(()) => return Ok(()),
                 Err(ref e) => return Err(String::from(e.to_string())),
             }
         }
