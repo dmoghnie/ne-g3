@@ -1,4 +1,9 @@
 
+pub enum TAdpBand {
+    ADP_BAND_CENELEC_A = 0, ADP_BAND_CENELEC_B = 1, ADP_BAND_FCC = 2, ADP_BAND_ARIB = 3
+}
+
+
 pub const MNGP_PRIME: u8 = 0x00;
 pub const MNGP_PRIME_GETQRY: u8 = 0x00;
 pub const MNGP_PRIME_GETRSP: u8 = 0x01;

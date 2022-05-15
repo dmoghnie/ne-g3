@@ -1,51 +1,92 @@
 use std::thread;
 
-use crate::usi::{MessageType};
+use serialport::Error;
+
+use crate::{usi::{MessageType, UsiCommand}, request::AdpInitializeRequest, message, usi};
 
 
 trait StateImpl : Send + Sync{
-    fn on_enter(&self, app: &mut App);
-    fn on_msg (&self, app: &mut App, msg:&MessageType) -> Option<&dyn StateImpl>;
-    fn on_exit(&self, app: &mut App);
+    fn get_name(&self)->&str;
+    fn on_enter(&self, app: &App);
+    fn on_msg (&self, app: &App, msg:&message::Message) -> Option<&dyn StateImpl>;
+    fn on_exit(&self, app: &App);
 }
 
-pub struct App<'a> {
-    thread_handle: Option<thread::JoinHandle<()>>,
+pub struct App<'a> {    
     state: Option<Box<&'a dyn StateImpl>>,    
-    cmd_tx: Option<flume::Sender<&'a MessageType>>
+    cmd_tx: &'a flume::Sender<MessageType>
 }
 
 impl <'a> App<'a>{
-    pub fn new(cmd_tx: &flume::Sender<MessageType>) -> Self {
+    pub fn new(cmd_tx: &'a flume::Sender<MessageType>) -> Self {
         App {
-            thread_handle: None,
             state: None,            
-            cmd_tx: None,
+            cmd_tx: cmd_tx,
         }
     }
-    pub fn process_msg(&mut self, msg: &MessageType){
-        if let Some(s) = &self.state {
-            s.on_msg (self, msg);
-        }
+    pub fn init(&mut self) {
+        self.state = Some(Box::new(&Start {}));
+        let cmd = AdpInitializeRequest::from_band(message::TAdpBand::ADP_BAND_CENELEC_A);	//TODO parameterize
+
+        if let Ok(c) = cmd.try_into() {
+            self.cmd_tx.send (usi::MessageType::UsiCommand(c));
+        }        
+    }
+    pub fn process_msg(&mut self, msg: &MessageType) -> bool{
+        log::trace!("App processing message {:?}", msg);
+        if let Some(s) = &self.state {            
+            match msg {
+                MessageType::UsiMessage(msg) => {
+                    if let Some(m) = message::usi_message_to_message (msg){
+                        let new_state = s.on_msg(self,&m);
+                        if new_state.is_none() {
+                            log::trace!("State {}, on exit", s.get_name());
+                            s.on_exit(self);
+                            return false;
+                        }                
+                        let new_state = new_state.unwrap();       
+                        if new_state.get_name() != s.get_name() {
+                            log::trace!("State {}, on exit", s.get_name());
+                            s.on_exit(self);
+                            self.state = Some(Box::new(new_state));
+                            log::trace!("State {}, on enter", new_state.get_name());
+                            new_state.on_enter(self);
+
+                        }
+                    }
+    
+                }
+                MessageType::UsiCommand(_) => {
+                    log::warn!("App received a UsiCommand");
+                }, 
+            }            
+        }    
+        return true;    
     }
 }
 
 
 #[derive(PartialEq, Eq)]
 struct Start {
-
+    
 }
 impl StateImpl for Start {
-    fn on_enter(&self, app: &mut App) {
+
+    fn on_enter(&self, app: &App) {
         
     }
 
-    fn on_msg (&self, app: &mut App, msg:&MessageType) -> Option<&dyn StateImpl> {
-        todo!()
+    fn on_msg (&self, app: &App, msg:&message::Message) -> Option<&dyn StateImpl> {
+        log::trace!("received message : {:?}", msg);
+        return Some(&Idle{});
     }
 
-    fn on_exit(&self, app: &mut App) {
-        todo!()
+    fn on_exit(&self, app: &App) {
+        
+    }
+
+    fn get_name(&self)->&str {
+        "Start"
     }
 }
 #[derive(PartialEq, Eq)]
@@ -53,15 +94,19 @@ struct Idle {
 
 }
 impl StateImpl for Idle {
-    fn on_enter(&self, app: &mut App) {
-        todo!()
+    fn on_enter(&self, app: &App) {
+        
     }
 
-    fn on_msg (&self, app: &mut App, msg:&MessageType) -> Option<&dyn StateImpl> {
-        todo!()
+    fn on_msg (&self, app: &App, msg:&message::Message) -> Option<&dyn StateImpl> {
+        return None
     }
 
-    fn on_exit(&self, app: &mut App) {
-        todo!()
+    fn on_exit(&self, app: &App) {
+        
+    }
+
+    fn get_name(&self)->&str {
+        "Idle"
     }
 }

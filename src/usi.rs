@@ -20,12 +20,13 @@ use std::thread::spawn;
 //TODO, this is a half duplex implementation, one thread for rx/tx.
 //When receiving, we timeout in x time and check the incoming channel for pending requests
 
+#[derive(Debug)]
 pub enum MessageType {
     UsiMessage(UsiMessage),
     UsiCommand(UsiCommand),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum RxState {
     RxIdle, // Inactive
     RxMsg,  // Receiving message
@@ -36,6 +37,7 @@ enum RxState {
 
 pub const RECEIVE_TIMEOUT:Duration = Duration::from_millis(10);
 
+#[derive(Debug)]
 pub struct UsiCommand {
     protocol: u8,
     data: Vec<u8>,
@@ -135,7 +137,7 @@ pub trait UsiSender {
     fn send(&mut self, cmd: &UsiCommand) -> std::result::Result<(), String>;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct UsiMessage {
     pub buf: Vec<u8>,
     rxState: RxState,

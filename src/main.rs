@@ -75,10 +75,13 @@ fn main() {
     let cmd_tx = usi_tx.clone();
     let t2 = thread::spawn(move || {
         let mut app = app::App::new(&cmd_tx);
+        app.init();
         loop {
             match app_rx.recv() {
                 Ok(msg) => {
-                    app.process_msg (&msg);
+                    if !app.process_msg (&msg) {
+                        break;
+                    }
                 },
                 Err(e) => {
 
@@ -87,7 +90,7 @@ fn main() {
         }
     });
 
-    t.join().unwrap();
+    t2.join().unwrap();
     // match usi_port.send (&request.try_into().unwrap()){
     //     Ok(size) => {
     //         trace!("sent cmd");
