@@ -38,10 +38,10 @@ fn main() {
     info!("Starting ...");
     let mut args = env::args();
     let tty_path = args.nth(1).unwrap_or_else(|| DEFAULT_TTY.into());
-
-    let mut port = serialport::new(DEFAULT_TTY, 230_400)
+    log::trace!("Port : {}", &tty_path);
+    let mut port = serialport::new(tty_path, 230_400)
     .timeout(Duration::from_millis(10))
-    .open().expect("Failed to open port");
+    .open().expect("Failed to open port {}");
 
     let (app_tx, app_rx) = flume::unbounded::<(MessageType)>();
     let (usi_tx, usi_rx) = flume::unbounded::<MessageType>();
@@ -50,6 +50,7 @@ fn main() {
     let sender = app_tx.clone();
     let t = thread::spawn(move || {
         let mut usi_port = usi::Port::new(Box::new(port));
+        // log::trace!("Listening on port {}", tty_path);
         usi_port.add_listener (sender);
         loop {
             usi_port.process();

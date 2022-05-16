@@ -8,7 +8,7 @@ use std::{
     thread::{self, JoinHandle}, time::Duration,
 };
 
-use crate::common;
+use crate::common::{self, PROTOCOL_PRIME_API};
 use crate::crc;
 use crate::usi;
 
@@ -142,7 +142,7 @@ pub struct UsiMessage {
     pub buf: Vec<u8>,
     rxState: RxState,
     pub protocol_type: Option<u8>,
-    payload_len: Option<u16>,
+    payload_len: usize
 }
 
 impl UsiMessage {
@@ -150,14 +150,22 @@ impl UsiMessage {
         UsiMessage {
             rxState: RxState::RxIdle,
             buf: Vec::with_capacity(1024),
-            payload_len: None,
-            protocol_type: None,
+            payload_len: 0,
+            protocol_type: None
         }
     }
     pub fn get_state(&self) -> &RxState {
         return &self.rxState;
     }
-
+    fn remove_header_and_crc (&mut self) {
+        if self.buf.len() >= 2 {
+            self.buf = self.buf[2..].to_vec();
+        }
+        self.buf = self.buf[..self.payload_len].to_vec();
+        if self.protocol_type == Some(PROTOCOL_PRIME_API){   
+            self.buf[0] = common::CMD_PROTOCOL(self.buf[0]);
+        }        
+    }
     fn process_header(&mut self) {
         if self.buf.len() < common::PROTOCOL_MIN_LEN.into() {
             return;
@@ -183,7 +191,7 @@ impl UsiMessage {
         }
     }
     fn check_crc(&self) -> bool {
-        if let (Some(pt), Some(pl)) = (self.protocol_type, self.payload_len) {
+        if let Some(pt) = self.protocol_type {
             match pt {
                 common::MNGP_PRIME_GETQRY
                 | common::MNGP_PRIME_GETRSP
@@ -199,7 +207,7 @@ impl UsiMessage {
                             | (tb[1] as u32) << 16
                             | (tb[2] as u32) << 8
                             | tb[3] as u32;
-                        if let Some(d) = self.buf.get(0..(pl as usize + 2)) {
+                        if let Some(d) = self.buf.get(0..(self.payload_len + 2)) {
                             return rxCrc == crc::evalCrc32(&d.to_vec());
                         }
                     }
@@ -213,7 +221,7 @@ impl UsiMessage {
                     let crc_len = 2;
                     if let Some(tb) = self.buf.get(self.buf.len() - (crc_len)..) {
                         let rxCrc = (tb[0] as u16) << 8 | (tb[1] as u16);
-                        if let Some(d) = self.buf.get(0..(pl as usize + 2)) {
+                        if let Some(d) = self.buf.get(0..(self.payload_len + 2)) {
                             return rxCrc == crc::evalCrc16(&d.to_vec());
                         }
                     }
@@ -222,7 +230,7 @@ impl UsiMessage {
                     let crc_len = 1;
                     if let Some(tb) = self.buf.get(self.buf.len() - (crc_len)..) {
                         let rxCrc = tb[0];
-                        if let Some(d) = self.buf.get(0..(pl as usize + 2)) {
+                        if let Some(d) = self.buf.get(0..(self.payload_len as usize + 2)) {
                             return rxCrc == crc::evalCrc8(&d.to_vec());
                         }
                     }
@@ -250,12 +258,7 @@ impl UsiMessage {
             }
         }
     }
-    pub fn get_message(&self) -> Option<&[u8]> {
-        if let Some(len) = self.payload_len {
-            return self.buf.get(2..(len as usize + 2));
-        }
-        None
-    }
+
     fn process_ch(&mut self, ch: u8) {
         // trace!("usi::process_ch {}", ch);
         match self.rxState {
@@ -282,7 +285,7 @@ impl UsiMessage {
                     }
                 } else {
                     self.buf.push(ch);
-                    if self.protocol_type == None || self.payload_len == None {
+                    if self.protocol_type == None {
                         self.process_header();
                     }
                 }
@@ -357,6 +360,7 @@ impl<'a, T: Read + Write + Send> Port<'a, T> where 'a: 'static, T:'static {
                 self.message.process(&mut self.buf);
                 match self.message.get_state() {
                     usi::RxState::RxDone => {
+                        self.message.remove_header_and_crc();
                         for listener in &self.listeners {
                             listener.send(usi::MessageType::UsiMessage(self.message.clone()));
                         }                        

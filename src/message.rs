@@ -1,7 +1,7 @@
-use usi::UsiMessage;
 use crate::usi;
 use num_enum::IntoPrimitive;
 use num_enum::TryFromPrimitive;
+use usi::UsiMessage;
 
 pub const G3_SERIAL_MSG_STATUS: u8 = 0;
 
@@ -205,6 +205,8 @@ pub struct TPathDescriptor {
     m_aForwardPath: [THopDescriptor; 16],
     m_aReversePath: [THopDescriptor; 16],
 }
+#[derive(Debug, Eq, PartialEq, TryFromPrimitive, IntoPrimitive)]
+#[repr(u32)]
 pub enum EAdpPibAttribute {
     ADP_IB_SECURITY_LEVEL = 0x00000000,
     ADP_IB_PREFIX_TABLE = 0x00000001,
@@ -274,42 +276,167 @@ pub enum EAdpPibAttribute {
     ADP_IB_MANUF_UPDATE_NON_VOLATILE_DATA = 0x080000DA,
     ADP_IB_MANUF_DISCOVER_ROUTE_GLOBAL_SEQ_NUM = 0x080000DB,
 }
+#[derive(Debug, Eq, PartialEq, TryFromPrimitive, IntoPrimitive)]
+#[repr(u32)]
+enum EMacWrpPibAttribute {
+    MAC_WRP_PIB_ACK_WAIT_DURATION = 0x00000040,
+    MAC_WRP_PIB_MAX_BE = 0x00000047,
+    MAC_WRP_PIB_BSN = 0x00000049,
+    MAC_WRP_PIB_DSN = 0x0000004C,
+    MAC_WRP_PIB_MAX_CSMA_BACKOFFS = 0x0000004E,
+    MAC_WRP_PIB_MIN_BE = 0x0000004F,
+    MAC_WRP_PIB_PAN_ID = 0x00000050,
+    MAC_WRP_PIB_PROMISCUOUS_MODE = 0x00000051,
+    MAC_WRP_PIB_SHORT_ADDRESS = 0x00000053,
+    MAC_WRP_PIB_MAX_FRAME_RETRIES = 0x00000059,
+    MAC_WRP_PIB_TIMESTAMP_SUPPORTED = 0x0000005C,
+    MAC_WRP_PIB_SECURITY_ENABLED = 0x0000005D,
+    MAC_WRP_PIB_KEY_TABLE = 0x00000071,
+    MAC_WRP_PIB_FRAME_COUNTER = 0x00000077,
+    MAC_WRP_PIB_HIGH_PRIORITY_WINDOW_SIZE = 0x00000100,
+    MAC_WRP_PIB_TX_DATA_PACKET_COUNT = 0x00000101,
+    MAC_WRP_PIB_RX_DATA_PACKET_COUNT = 0x00000102,
+    MAC_WRP_PIB_TX_CMD_PACKET_COUNT = 0x00000103,
+    MAC_WRP_PIB_RX_CMD_PACKET_COUNT = 0x00000104,
+    MAC_WRP_PIB_CSMA_FAIL_COUNT = 0x00000105,
+    MAC_WRP_PIB_CSMA_NO_ACK_COUNT = 0x00000106,
+    MAC_WRP_PIB_RX_DATA_BROADCAST_COUNT = 0x00000107,
+    MAC_WRP_PIB_TX_DATA_BROADCAST_COUNT = 0x00000108,
+    MAC_WRP_PIB_BAD_CRC_COUNT = 0x00000109,
+    MAC_WRP_PIB_NEIGHBOUR_TABLE = 0x0000010A,
+    MAC_WRP_PIB_FREQ_NOTCHING = 0x0000010B,
+    MAC_WRP_PIB_CSMA_FAIRNESS_LIMIT = 0x0000010C,
+    MAC_WRP_PIB_TMR_TTL = 0x0000010D,
+    MAC_WRP_PIB_NEIGHBOUR_TABLE_ENTRY_TTL = 0x0000010E, // Used in Spec15
+    // MAC_WRP_PIB_POS_TABLE_ENTRY_TTL = 0x0000010E,       // Used in Spec17
+    MAC_WRP_PIB_RC_COORD = 0x0000010F,
+    MAC_WRP_PIB_TONE_MASK = 0x00000110,
+    MAC_WRP_PIB_BEACON_RANDOMIZATION_WINDOW_LENGTH = 0x00000111,
+    MAC_WRP_PIB_A = 0x00000112,
+    MAC_WRP_PIB_K = 0x00000113,
+    MAC_WRP_PIB_MIN_CW_ATTEMPTS = 0x00000114,
+    MAC_WRP_PIB_CENELEC_LEGACY_MODE = 0x00000115,
+    MAC_WRP_PIB_FCC_LEGACY_MODE = 0x00000116,
+    MAC_WRP_PIB_BROADCAST_MAX_CW_ENABLE = 0x0000011E,
+    MAC_WRP_PIB_TRANSMIT_ATTEN = 0x0000011F,
+    MAC_WRP_PIB_POS_TABLE = 0x00000120,
+    // manufacturer specific
+    // provides access to device table
+    MAC_WRP_PIB_MANUF_DEVICE_TABLE = 0x08000000,
+    // Extended address of this node.
+    MAC_WRP_PIB_MANUF_EXTENDED_ADDRESS = 0x08000001,
+    // provides access to neighbour table by short address (transmitted as index)
+    MAC_WRP_PIB_MANUF_NEIGHBOUR_TABLE_ELEMENT = 0x08000002,
+    // returns the maximum number of tones used by the band
+    MAC_WRP_PIB_MANUF_BAND_INFORMATION = 0x08000003,
+    // Short address of the coordinator.
+    MAC_WRP_PIB_MANUF_COORD_SHORT_ADDRESS = 0x08000004,
+    // Maximal payload supported by MAC.
+    MAC_WRP_PIB_MANUF_MAX_MAC_PAYLOAD_SIZE = 0x08000005,
+    // Resets the device table upon a GMK activation.
+    MAC_WRP_PIB_MANUF_SECURITY_RESET = 0x08000006,
+    // Forces Modulation Scheme in every transmitted frame
+    // 0 - Not forced, 1 - Force Differential, 2 - Force Coherent
+    MAC_WRP_PIB_MANUF_FORCED_MOD_SCHEME = 0x08000007,
+    // Forces Modulation Type in every transmitted frame
+    // 0 - Not forced, 1 - Force BPSK_ROBO, 2 - Force BPSK, 3 - Force QPSK, 4 - Force 8PSK
+    MAC_WRP_PIB_MANUF_FORCED_MOD_TYPE = 0x08000008,
+    // Forces ToneMap in every transmitted frame
+    // {0} - Not forced, other value will be used as tonemap
+    MAC_WRP_PIB_MANUF_FORCED_TONEMAP = 0x08000009,
+    // Forces Modulation Scheme bit in Tone Map Response
+    // 0 - Not forced, 1 - Force Differential, 2 - Force Coherent
+    MAC_WRP_PIB_MANUF_FORCED_MOD_SCHEME_ON_TMRESPONSE = 0x0800000A,
+    // Forces Modulation Type bits in Tone Map Response
+    // 0 - Not forced, 1 - Force BPSK_ROBO, 2 - Force BPSK, 3 - Force QPSK, 4 - Force 8PSK
+    MAC_WRP_PIB_MANUF_FORCED_MOD_TYPE_ON_TMRESPONSE = 0x0800000B,
+    // Forces ToneMap field Tone Map Response
+    // {0} - Not forced, other value will be used as tonemap field
+    MAC_WRP_PIB_MANUF_FORCED_TONEMAP_ON_TMRESPONSE = 0x0800000C,
+    // Gets Modulation Scheme of last received frame
+    MAC_WRP_PIB_MANUF_LAST_RX_MOD_SCHEME = 0x0800000D,
+    // Gets Modulation Scheme of last received frame
+    MAC_WRP_PIB_MANUF_LAST_RX_MOD_TYPE = 0x0800000E,
+    // Indicates whether an LBP frame for other destination has been received
+    MAC_WRP_PIB_MANUF_LBP_FRAME_RECEIVED = 0x0800000F,
+    // Indicates whether an LBP frame for other destination has been received
+    MAC_WRP_PIB_MANUF_LNG_FRAME_RECEIVED = 0x08000010,
+    // Indicates whether an Beacon frame from other nodes has been received
+    MAC_WRP_PIB_MANUF_BCN_FRAME_RECEIVED = 0x08000011,
+    // Gets number of valid elements in the Neighbour Table
+    MAC_WRP_PIB_MANUF_NEIGHBOUR_TABLE_COUNT = 0x08000012,
+    // Gets number of discarded packets due to Other Destination
+    MAC_WRP_PIB_MANUF_RX_OTHER_DESTINATION_COUNT = 0x08000013,
+    // Gets number of discarded packets due to Invalid Frame Lenght
+    MAC_WRP_PIB_MANUF_RX_INVALID_FRAME_LENGTH_COUNT = 0x08000014,
+    // Gets number of discarded packets due to MAC Repetition
+    MAC_WRP_PIB_MANUF_RX_MAC_REPETITION_COUNT = 0x08000015,
+    // Gets number of discarded packets due to Wrong Addressing Mode
+    MAC_WRP_PIB_MANUF_RX_WRONG_ADDR_MODE_COUNT = 0x08000016,
+    // Gets number of discarded packets due to Unsupported Security
+    MAC_WRP_PIB_MANUF_RX_UNSUPPORTED_SECURITY_COUNT = 0x08000017,
+    // Gets number of discarded packets due to Wrong Key Id
+    MAC_WRP_PIB_MANUF_RX_WRONG_KEY_ID_COUNT = 0x08000018,
+    // Gets number of discarded packets due to Invalid Key
+    MAC_WRP_PIB_MANUF_RX_INVALID_KEY_COUNT = 0x08000019,
+    // Gets number of discarded packets due to Wrong Frame Counter
+    MAC_WRP_PIB_MANUF_RX_WRONG_FC_COUNT = 0x0800001A,
+    // Gets number of discarded packets due to Decryption Error
+    MAC_WRP_PIB_MANUF_RX_DECRYPTION_ERROR_COUNT = 0x0800001B,
+    // Gets number of discarded packets due to Segment Decode Error
+    MAC_WRP_PIB_MANUF_RX_SEGMENT_DECODE_ERROR_COUNT = 0x0800001C,
+    // Enables MAC Sniffer
+    MAC_WRP_PIB_MANUF_ENABLE_MAC_SNIFFER = 0x0800001D,
+    // Gets number of valid elements in the POS Table. Unused in SPEC-15
+    MAC_WRP_PIB_MANUF_POS_TABLE_COUNT = 0x0800001E,
+    // Gets or Sets number of retires left before forcing ROBO mode
+    MAC_WRP_PIB_MANUF_RETRIES_LEFT_TO_FORCE_ROBO = 0x0800001F,
+    // Gets internal MAC version
+    MAC_WRP_PIB_MANUF_MAC_INTERNAL_VERSION = 0x08000021,
+    // Gets internal MAC RT version
+    MAC_WRP_PIB_MANUF_MAC_RT_INTERNAL_VERSION = 0x08000022,
+    // Gets or sets a parameter in Phy layer. Index will be used to contain PHY parameter ID.
+    // See definitions below
+    MAC_WRP_PIB_MANUF_PHY_PARAM = 0x08000020,
+}
 
-
-pub fn usi_message_to_message (msg: &UsiMessage) -> Option<Message> {
+pub fn usi_message_to_message(msg: &UsiMessage) -> Option<Message> {
     {
         if let Some(cmd) = msg.buf.get(0) {
-			match *cmd {
-				G3_SERIAL_MSG_ADP_DATA_CONFIRM => {	
-					if let Some(data_response) = DataResponse::try_from_message(&msg) {
+            match *cmd {
+                G3_SERIAL_MSG_ADP_DATA_CONFIRM => {
+                    if let Some(data_response) = DataResponse::try_from_message(&msg) {
                         return Some(Message::AdpG3(AdpG3::DataResponse(data_response)));
-					}				
-				},
-				G3_SERIAL_MSG_ADP_SET_CONFIRM => {
-					if let Some(set_response) = SetResponse::try_from_message(&msg) {						
-						return Some(Message::AdpG3(AdpG3::SetResponse(set_response)));
-					}
-				},
-				G3_SERIAL_MSG_STATUS => {
-					if let Some(msg_response) = MsgStatusResponse::try_from_message(&msg){
+                    }
+                },
+                G3_SERIAL_MSG_ADP_SET_CONFIRM => {
+                    if let Some(set_response) = SetResponse::try_from_message(&msg) {
+                        return Some(Message::AdpG3(AdpG3::SetResponse(set_response)));
+                    }
+                },
+                G3_SERIAL_MSG_STATUS => {
+                    if let Some(msg_response) = MsgStatusResponse::try_from_message(&msg) {
                         return Some(Message::AdpG3(AdpG3::MsgStatusResponse(msg_response)));
-					}
-				},
-				G3_SERIAL_MSG_ADP_DISCOVERY_INDICATION => {
-					if let Some(discovery_event) = DiscoveryEvent::try_from_message(&msg){
+                    }
+                },
+                G3_SERIAL_MSG_ADP_DISCOVERY_INDICATION => {
+                    if let Some(discovery_event) = DiscoveryEvent::try_from_message(&msg) {
                         return Some(Message::AdpG3(AdpG3::DiscoveryEvent(discovery_event)));
-					}
-				},
-				G3_SERIAL_MSG_ADP_DISCOVERY_CONFIRM => {
-					if let Some(discovery_response) = DiscoveryResponse::try_from_message(&msg) {
+                    }
+                },
+                G3_SERIAL_MSG_ADP_DISCOVERY_CONFIRM => {
+                    if let Some(discovery_response) = DiscoveryResponse::try_from_message(&msg) {
                         return Some(Message::AdpG3(AdpG3::DiscoveryResponse(discovery_response)));
-					}
-				},
-				_ => {
-                    return None
-				}
-			}
-		}
+                    }
+                },
+                G3_SERIAL_MSG_ADP_GET_CONFIRM => {
+                    if let Some(get_response) = GetResponse::try_from_message(&msg) {
+                        return Some(Message::AdpG3(AdpG3::GetResponse(get_response)));
+                    }
+                }
+                _ => return None,
+            }
+        }
         None
     }
 }
@@ -439,6 +566,7 @@ pub struct MsgStatusResponse {
 impl MsgStatusResponse {
     pub fn try_from_message(msg: &usi::UsiMessage) -> Option<MsgStatusResponse> {
         if msg.buf.len() > 0 {
+            //cmd is the first byte???
             //Add one byte for cmd
             if let Ok(status) = EAdpStatus::try_from(msg.buf[0]) {
                 if let Some(&cmd) = msg.buf.get(1) {
@@ -456,8 +584,81 @@ pub struct GetResponse {
     attribute_id: u32,
     attribute_idx: u16,
     attribute_len: u8,
-    attribute_val: [u8; 64],
+    attribute_val: Vec<u8>,
 }
+
+/*
+if (g_adp_sync_mgmt.f_sync_req || g_adpNotifications.fnctAdpGetConfirm){
+          struct TAdpGetConfirm adpGetConfirm;
+          adpGetConfirm.m_u8Status = (*ptrMsg++);
+          adpGetConfirm.m_u32AttributeId = (*ptrMsg++);
+          adpGetConfirm.m_u32AttributeId = (*ptrMsg++) + (adpGetConfirm.m_u32AttributeId << 8);
+          adpGetConfirm.m_u32AttributeId = (*ptrMsg++) + (adpGetConfirm.m_u32AttributeId << 8);
+          adpGetConfirm.m_u32AttributeId = (*ptrMsg++) + (adpGetConfirm.m_u32AttributeId << 8);
+          adpGetConfirm.m_u16AttributeIndex = (*ptrMsg++);
+          adpGetConfirm.m_u16AttributeIndex = (*ptrMsg++) + (adpGetConfirm.m_u16AttributeIndex << 8);
+          adpGetConfirm.m_u8AttributeLength = (*ptrMsg++);
+          if(adpGetConfirm.m_u8AttributeLength > 64){
+             //ToDo: Log error
+             return false;
+          }
+      //LOG_IFACE_G3_ADP("Status:%d, AttributeId:0x%X,AttributeIndex=0x%X,AttributeLength=%d\r\n",adpGetConfirm.m_u8Status,adpGetConfirm.m_u32AttributeId,adpGetConfirm.m_u16AttributeIndex,adpGetConfirm.m_u8AttributeLength);
+          memcpy(&adpGetConfirm.m_au8AttributeValue, ptrMsg, adpGetConfirm.m_u8AttributeLength);
+
+          if (g_adp_sync_mgmt.f_sync_req && (g_adp_sync_mgmt.m_u32AttributeId == adpGetConfirm.m_u32AttributeId)){
+                // Synchronous call -> Store the result
+          //LOG_IFACE_G3_ADP("Syncronous Call pending; copying received structure\r\n");
+                memcpy(&g_adp_sync_mgmt.s_GetConfirm, &adpGetConfirm, sizeof(struct TAdpGetConfirm));
+                g_adp_sync_mgmt.f_sync_res = true;
+          }
+
+      if (g_adpNotifications.fnctAdpGetConfirm)
+          {
+              // Asynchronous call -> Callback
+              g_adpNotifications.fnctAdpGetConfirm(&adpGetConfirm);
+          }
+    }
+*/
+const MIN_GET_RESPONSE_LEN: usize = 8;
+impl GetResponse {
+    pub fn try_from_message(msg: &usi::UsiMessage) -> Option<GetResponse> {
+        if msg.buf.len() >= MIN_GET_RESPONSE_LEN + 1 {
+            //Add one byte for cmd
+            if let Ok(status) = EAdpStatus::try_from(msg.buf[1]) {
+                
+                let mut attribute_id:u32 = msg.buf[2] as u32;
+                attribute_id = (attribute_id << 8) + msg.buf[3] as u32;
+                attribute_id = (attribute_id << 8) + msg.buf[4] as u32;
+                attribute_id = (attribute_id << 8) + msg.buf[5] as u32;
+                
+                let mut attribute_idx = msg.buf[6] as u16;
+                attribute_idx = (attribute_idx << 8) + msg.buf[7] as u16;
+                // let mut attribute_id;
+                // if let Some(attribute_id_buf) = msg.buf.get(2..5) {
+                //     attribute_id = u32::from_be_bytes(*attribute_id_buf);
+                // }
+                
+                // let mut attribute_idx;
+                // if let Some(attribute_idx_buf) = msg.buf.get(5..7) {
+                //     attribute_idx = u16::from_be_bytes(attribute_idx_buf);
+                // }
+                let attribute_len = msg.buf[8];
+                let mut result = GetResponse {
+                    status, attribute_id, attribute_idx, attribute_len, attribute_val: Vec::new()
+                };
+
+                if (attribute_len > 0 && msg.buf.len() >= (MIN_GET_RESPONSE_LEN + 1 + attribute_len as usize)) {
+                    if let Some(content) = msg.buf.get(9..){
+                        result.attribute_val.append(&mut content.to_vec());
+                    }                                        
+                }
+                return Some(result);
+            }
+        }
+        None
+    }
+}
+
 #[derive(Debug)]
 pub struct LbpReponse {}
 
@@ -539,14 +740,14 @@ impl SetResponse {
     pub fn try_from_message(msg: &usi::UsiMessage) -> Option<SetResponse> {
         if msg.buf.len() == SET_RESPONSE_LEN + 1 {
             //Add one byte for cmd
-            if let Ok(status) = EAdpStatus::try_from(msg.buf[0]) {
+            if let Ok(status) = EAdpStatus::try_from(msg.buf[1]) {
                 return Some(SetResponse {
                     status,
-                    attribute_id: (msg.buf[1] as u32) << 24
-                        | (msg.buf[2] as u32) << 16
-                        | (msg.buf[3] as u32) << 8
-                        | (msg.buf[4] as u32),
-                    attribute_idx: (msg.buf[5] as u16) << 8 | (msg.buf[6] as u16),
+                    attribute_id: (msg.buf[2] as u32) << 24
+                        | (msg.buf[3] as u32) << 16
+                        | (msg.buf[4] as u32) << 8
+                        | (msg.buf[5] as u32),
+                    attribute_idx: (msg.buf[6] as u16) << 8 | (msg.buf[7] as u16),
                 });
             }
         }
@@ -572,9 +773,9 @@ pub struct DiscoveryResponse {
 }
 impl DiscoveryResponse {
     pub fn try_from_message(msg: &usi::UsiMessage) -> Option<DiscoveryResponse> {
-        if msg.buf.len() > 0 {
+        if msg.buf.len() > 1 {
             //Add one byte for cmd
-            if let Ok(status) = EAdpStatus::try_from(msg.buf[0]) {
+            if let Ok(status) = EAdpStatus::try_from(msg.buf[1]) {
                 return Some(DiscoveryResponse { status });
             }
         }

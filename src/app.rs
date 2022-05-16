@@ -2,7 +2,7 @@ use std::thread;
 
 use serialport::Error;
 
-use crate::{usi::{MessageType, UsiCommand}, request::AdpInitializeRequest, message, usi};
+use crate::{usi::{MessageType, UsiCommand}, request::{AdpInitializeRequest, AdpDiscoveryRequest, AdpGetRequest}, message, usi};
 
 
 trait StateImpl : Send + Sync{
@@ -54,6 +54,9 @@ impl <'a> App<'a>{
 
                         }
                     }
+                    else{
+                        log::warn!("Adp failed to process message ...");
+                    }
     
                 }
                 MessageType::UsiCommand(_) => {
@@ -95,11 +98,15 @@ struct Idle {
 }
 impl StateImpl for Idle {
     fn on_enter(&self, app: &App) {
-        
+        let discovery = AdpDiscoveryRequest::new(2);
+        if let Ok(c) = discovery.try_into() {
+            app.cmd_tx.send (usi::MessageType::UsiCommand(c));
+        }   
     }
 
     fn on_msg (&self, app: &App, msg:&message::Message) -> Option<&dyn StateImpl> {
-        return None
+        log::trace!("received message : {:?}", msg);
+        return Some(&GetVersion{});
     }
 
     fn on_exit(&self, app: &App) {
@@ -108,5 +115,29 @@ impl StateImpl for Idle {
 
     fn get_name(&self)->&str {
         "Idle"
+    }
+}
+
+struct GetVersion {}
+
+impl StateImpl for GetVersion {
+    fn get_name(&self)->&str {
+        "GetVersion"
+    }
+
+    fn on_enter(&self, app: &App) {
+        let get_version = AdpGetRequest::new (message::EAdpPibAttribute::ADP_IB_SOFT_VERSION, 0);
+        if let Ok(c) = get_version.try_into() {
+            app.cmd_tx.send (usi::MessageType::UsiCommand(c));
+        }  
+    }
+
+    fn on_msg (&self, app: &App, msg:&message::Message) -> Option<&dyn StateImpl> {
+        log::trace!("state {}, msg {:?}", self.get_name(), msg);
+        None
+    }
+
+    fn on_exit(&self, app: &App) {
+        
     }
 }
