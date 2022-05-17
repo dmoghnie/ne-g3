@@ -142,6 +142,7 @@ impl SetupParameters {
         
         let mut v = vec![0x31, 0x30, 0x36, 0x33, 0x4C, 0x50, 0x54, 0x41];
         v.reverse();
+        parameters.borrow_mut().push(Parameter::new(common::PROTOCOL_ADP_G3, message::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL.into(), 0, [0x0].to_vec()));
         parameters.borrow_mut().push(Parameter::new (common::PROTOCOL_MAC_G3, message::EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_EXTENDED_ADDRESS.into(), 
                     0, v));
 
@@ -156,9 +157,9 @@ impl SetupParameters {
         parameters.borrow_mut().push(Parameter::new(common::PROTOCOL_ADP_G3, message::EAdpPibAttribute::ADP_IB_ROUTING_TABLE_ENTRY_TTL.into(), 0, vec![0x00, 0xB4] ));
         parameters.borrow_mut().push(Parameter::new(common::PROTOCOL_ADP_G3, message::EAdpPibAttribute::ADP_IB_MAX_JOIN_WAIT_TIME.into(), 0, vec![0x00, 0x5A]));
         parameters.borrow_mut().push(Parameter::new(common::PROTOCOL_ADP_G3, message::EAdpPibAttribute::ADP_IB_MAX_HOPS.into(), 0, vec![0x0A] ));
-        let mut val = vec![0xAB,0x10,0x34,0x11,0x45,0x11,0x1B,0xC3,0xC1,0x2D,0xE8,0xFF,0x11,0x14,0x22,0x04];
-        val.reverse();
-        parameters.borrow_mut().push(Parameter::new(common::PROTOCOL_ADP_G3, message::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY.into(), 0, val));
+        // let mut val = vec![0xAB,0x10,0x34,0x11,0x45,0x11,0x1B,0xC3,0xC1,0x2D,0xE8,0xFF,0x11,0x14,0x22,0x04];
+        // val.reverse();
+        // parameters.borrow_mut().push(Parameter::new(common::PROTOCOL_ADP_G3, message::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY.into(), 0, val));
         
         SetupParameters { parameters }
     
