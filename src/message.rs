@@ -205,7 +205,7 @@ pub struct TPathDescriptor {
     m_aForwardPath: [THopDescriptor; 16],
     m_aReversePath: [THopDescriptor; 16],
 }
-#[derive(Debug, Eq, PartialEq, TryFromPrimitive, IntoPrimitive)]
+#[derive(Debug, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Hash)]
 #[repr(u32)]
 pub enum EAdpPibAttribute {
     ADP_IB_SECURITY_LEVEL = 0x00000000,
@@ -276,9 +276,9 @@ pub enum EAdpPibAttribute {
     ADP_IB_MANUF_UPDATE_NON_VOLATILE_DATA = 0x080000DA,
     ADP_IB_MANUF_DISCOVER_ROUTE_GLOBAL_SEQ_NUM = 0x080000DB,
 }
-#[derive(Debug, Eq, PartialEq, TryFromPrimitive, IntoPrimitive)]
+#[derive(Debug, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Hash)]
 #[repr(u32)]
-enum EMacWrpPibAttribute {
+pub enum EMacWrpPibAttribute {
     MAC_WRP_PIB_ACK_WAIT_DURATION = 0x00000040,
     MAC_WRP_PIB_MAX_BE = 0x00000047,
     MAC_WRP_PIB_BSN = 0x00000049,
@@ -414,6 +414,11 @@ pub fn usi_message_to_message(msg: &UsiMessage) -> Option<Message> {
                         return Some(Message::AdpG3(AdpG3::SetResponse(set_response)));
                     }
                 },
+                G3_SERIAL_MSG_ADP_MAC_SET_CONFIRM => {
+                    if let Some(set_response) = SetMacResponse::try_from_message(&msg) {
+                        return Some(Message::AdpG3(AdpG3::SetMacResponse(set_response)));
+                    }
+                },
                 G3_SERIAL_MSG_STATUS => {
                     if let Some(msg_response) = MsgStatusResponse::try_from_message(&msg) {
                         return Some(Message::AdpG3(AdpG3::MsgStatusResponse(msg_response)));
@@ -432,6 +437,17 @@ pub fn usi_message_to_message(msg: &UsiMessage) -> Option<Message> {
                 G3_SERIAL_MSG_ADP_GET_CONFIRM => {
                     if let Some(get_response) = GetResponse::try_from_message(&msg) {
                         return Some(Message::AdpG3(AdpG3::GetResponse(get_response)));
+                    }
+                },
+                G3_SERIAL_MSG_ADP_MAC_GET_CONFIRM => {
+                    if let Some(mac_get_response) = GetMacResponse::try_from_message(&msg) {
+                        return Some(Message::AdpG3(AdpG3::GetMacResponse(mac_get_response)));
+                    }
+
+                },
+                G3_SERIAL_MSG_ADP_NETWORK_START_CONFIRM=> {
+                    if let Some(network_start_response) = NetworkStartResponse::try_from_message(&msg){
+                        return Some(Message::AdpG3(AdpG3::NetworkStartResponse(network_start_response)));
                     }
                 }
                 _ => return None,
@@ -549,8 +565,8 @@ pub enum AdpG3 {
     LbpEvent(LbpEvent),
     RouteDiscoveryResponse(RouteDiscoveryResponse),
     PathDiscoveryResponse(PathDiscoveryResponse),
-    MacSetResponse(MacSetResponse),
-    MacGetResponse(MacGetResponse),
+    SetMacResponse(SetMacResponse),
+    GetMacResponse(GetMacResponse),
     BufferEvent(BufferEvent),
     DiscoveryEvent(DiscoveryEvent),
     PreqEvent(PreqEvent),
@@ -580,45 +596,13 @@ impl MsgStatusResponse {
 
 #[derive(Debug)]
 pub struct GetResponse {
-    status: EAdpStatus,
-    attribute_id: u32,
-    attribute_idx: u16,
-    attribute_len: u8,
-    attribute_val: Vec<u8>,
+    pub status: EAdpStatus,
+    pub attribute_id: u32,
+    pub attribute_idx: u16,
+    pub attribute_len: u8,
+    pub attribute_val: Vec<u8>,
 }
 
-/*
-if (g_adp_sync_mgmt.f_sync_req || g_adpNotifications.fnctAdpGetConfirm){
-          struct TAdpGetConfirm adpGetConfirm;
-          adpGetConfirm.m_u8Status = (*ptrMsg++);
-          adpGetConfirm.m_u32AttributeId = (*ptrMsg++);
-          adpGetConfirm.m_u32AttributeId = (*ptrMsg++) + (adpGetConfirm.m_u32AttributeId << 8);
-          adpGetConfirm.m_u32AttributeId = (*ptrMsg++) + (adpGetConfirm.m_u32AttributeId << 8);
-          adpGetConfirm.m_u32AttributeId = (*ptrMsg++) + (adpGetConfirm.m_u32AttributeId << 8);
-          adpGetConfirm.m_u16AttributeIndex = (*ptrMsg++);
-          adpGetConfirm.m_u16AttributeIndex = (*ptrMsg++) + (adpGetConfirm.m_u16AttributeIndex << 8);
-          adpGetConfirm.m_u8AttributeLength = (*ptrMsg++);
-          if(adpGetConfirm.m_u8AttributeLength > 64){
-             //ToDo: Log error
-             return false;
-          }
-      //LOG_IFACE_G3_ADP("Status:%d, AttributeId:0x%X,AttributeIndex=0x%X,AttributeLength=%d\r\n",adpGetConfirm.m_u8Status,adpGetConfirm.m_u32AttributeId,adpGetConfirm.m_u16AttributeIndex,adpGetConfirm.m_u8AttributeLength);
-          memcpy(&adpGetConfirm.m_au8AttributeValue, ptrMsg, adpGetConfirm.m_u8AttributeLength);
-
-          if (g_adp_sync_mgmt.f_sync_req && (g_adp_sync_mgmt.m_u32AttributeId == adpGetConfirm.m_u32AttributeId)){
-                // Synchronous call -> Store the result
-          //LOG_IFACE_G3_ADP("Syncronous Call pending; copying received structure\r\n");
-                memcpy(&g_adp_sync_mgmt.s_GetConfirm, &adpGetConfirm, sizeof(struct TAdpGetConfirm));
-                g_adp_sync_mgmt.f_sync_res = true;
-          }
-
-      if (g_adpNotifications.fnctAdpGetConfirm)
-          {
-              // Asynchronous call -> Callback
-              g_adpNotifications.fnctAdpGetConfirm(&adpGetConfirm);
-          }
-    }
-*/
 const MIN_GET_RESPONSE_LEN: usize = 8;
 impl GetResponse {
     pub fn try_from_message(msg: &usi::UsiMessage) -> Option<GetResponse> {
@@ -660,6 +644,55 @@ impl GetResponse {
 }
 
 #[derive(Debug)]
+pub struct GetMacResponse {
+    pub status: EAdpStatus,
+    pub attribute_id: u32,
+    pub attribute_idx: u16,
+    pub attribute_len: u8,
+    pub attribute_val: Vec<u8>,
+}
+
+const MIN_GET_MAC_RESPONSE_LEN: usize = 8;
+impl GetMacResponse {
+    pub fn try_from_message(msg: &usi::UsiMessage) -> Option<GetMacResponse> {
+        if msg.buf.len() >= MIN_GET_RESPONSE_LEN + 1 {
+            //Add one byte for cmd
+            if let Ok(status) = EAdpStatus::try_from(msg.buf[1]) {
+                
+                let mut attribute_id:u32 = msg.buf[2] as u32;
+                attribute_id = (attribute_id << 8) + msg.buf[3] as u32;
+                attribute_id = (attribute_id << 8) + msg.buf[4] as u32;
+                attribute_id = (attribute_id << 8) + msg.buf[5] as u32;
+                
+                let mut attribute_idx = msg.buf[6] as u16;
+                attribute_idx = (attribute_idx << 8) + msg.buf[7] as u16;
+                // let mut attribute_id;
+                // if let Some(attribute_id_buf) = msg.buf.get(2..5) {
+                //     attribute_id = u32::from_be_bytes(*attribute_id_buf);
+                // }
+                
+                // let mut attribute_idx;
+                // if let Some(attribute_idx_buf) = msg.buf.get(5..7) {
+                //     attribute_idx = u16::from_be_bytes(attribute_idx_buf);
+                // }
+                let attribute_len = msg.buf[8];
+                let mut result = GetMacResponse {
+                    status, attribute_id, attribute_idx, attribute_len, attribute_val: Vec::new()
+                };
+
+                if (attribute_len > 0 && msg.buf.len() >= (MIN_GET_RESPONSE_LEN + 1 + attribute_len as usize)) {
+                    if let Some(content) = msg.buf.get(9..){
+                        result.attribute_val.append(&mut content.to_vec());
+                    }                                        
+                }
+                return Some(result);
+            }
+        }
+        None
+    }
+}
+
+#[derive(Debug)]
 pub struct LbpReponse {}
 
 #[derive(Debug)]
@@ -670,12 +703,6 @@ pub struct RouteDiscoveryResponse {}
 
 #[derive(Debug)]
 pub struct PathDiscoveryResponse {}
-
-#[derive(Debug)]
-pub struct MacSetResponse {}
-
-#[derive(Debug)]
-pub struct MacGetResponse {}
 
 #[derive(Debug)]
 pub struct BufferEvent {}
@@ -729,6 +756,31 @@ pub struct NetworkLeaveResponse {}
 #[derive(Debug)]
 pub struct ResetResponse {}
 
+#[derive(Debug)]
+pub struct SetMacResponse {
+    status: EAdpStatus,
+    attribute_id: u32,
+    attribute_idx: u16,
+}
+impl SetMacResponse {
+    pub fn try_from_message(msg: &usi::UsiMessage) -> Option<SetMacResponse> {
+        if msg.buf.len() == SET_RESPONSE_LEN + 1 {
+            //Add one byte for cmd
+            if let Ok(status) = EAdpStatus::try_from(msg.buf[1]) {
+                return Some(SetMacResponse {
+                    status,
+                    attribute_id: (msg.buf[2] as u32) << 24
+                        | (msg.buf[3] as u32) << 16
+                        | (msg.buf[4] as u32) << 8
+                        | (msg.buf[5] as u32),
+                    attribute_idx: (msg.buf[6] as u16) << 8 | (msg.buf[7] as u16),
+                });
+            }
+        }
+        None
+    }
+}
+
 const SET_RESPONSE_LEN: usize = 7;
 pub struct SetResponse {
     status: EAdpStatus,
@@ -765,7 +817,20 @@ impl fmt::Debug for SetResponse {
 }
 
 #[derive(Debug)]
-pub struct NetworkStartResponse {}
+pub struct NetworkStartResponse {
+    status: EAdpStatus,
+}
+impl NetworkStartResponse {
+    pub fn try_from_message(msg: &usi::UsiMessage) -> Option<NetworkStartResponse> {
+        if msg.buf.len() > 1 {
+            //Add one byte for cmd
+            if let Ok(status) = EAdpStatus::try_from(msg.buf[1]) {
+                return Some(NetworkStartResponse { status });
+            }
+        }
+        None
+    }
+}
 
 #[derive(Debug)]
 pub struct DiscoveryResponse {

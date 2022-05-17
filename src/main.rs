@@ -7,7 +7,7 @@ mod request;
 mod app;
 
 use std::{env, io, str, thread};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use bytes::BytesMut;
 use flume::{Sender, Receiver};
@@ -28,7 +28,7 @@ use log::Level;
 use crate::usi::{UsiSender, UsiCommand, MessageType};
 
 
-
+const TIMER_RESOLUTION:Duration = Duration::from_millis(10000);
 
 fn main() {
     // let (tx, rx) = flume::unbounded();
@@ -74,9 +74,9 @@ fn main() {
     });
 
     let cmd_tx = usi_tx.clone();
+    
     let t2 = thread::spawn(move || {
-        let mut app = app::App::new(&cmd_tx);
-        app.init();
+        let mut app = app::App::new(&cmd_tx);    
         loop {
             match app_rx.recv() {
                 Ok(msg) => {
@@ -91,6 +91,14 @@ fn main() {
         }
     });
 
+    let system_tx = app_tx.clone();
+    system_tx.send (MessageType::SystemStartup);
+    let system_handle = thread::spawn(move || {
+        loop {
+            system_tx.send(MessageType::HeartBeat(SystemTime::now()));
+            thread::sleep(TIMER_RESOLUTION);
+        }
+    });
     t2.join().unwrap();
     // match usi_port.send (&request.try_into().unwrap()){
     //     Ok(size) => {

@@ -5,7 +5,7 @@ use std::{
     collections::VecDeque,
     io::{Read, Write},
     ops::Index,
-    thread::{self, JoinHandle}, time::Duration,
+    thread::{self, JoinHandle}, time::{Duration, SystemTime},
 };
 
 use crate::common::{self, PROTOCOL_PRIME_API};
@@ -24,6 +24,8 @@ use std::thread::spawn;
 pub enum MessageType {
     UsiMessage(UsiMessage),
     UsiCommand(UsiCommand),
+    HeartBeat(SystemTime),
+    SystemStartup
 }
 
 #[derive(Clone, Debug)]

@@ -49,6 +49,28 @@ impl TryInto<usi::UsiCommand> for AdpDiscoveryRequest {
 
 }
 
+#[derive(Debug)]
+pub struct AdpNetworkStartRequest {    
+    pan_id:u16 //maybe we should have durations in a more rusty way, then we convert to u8
+}
+impl AdpNetworkStartRequest {
+    pub fn new (pan_id: u16) -> Self {
+        AdpNetworkStartRequest { pan_id}
+    }
+}
+impl TryInto<usi::UsiCommand> for AdpNetworkStartRequest {
+    type Error=();
+    // fn to_command (&self) -> usi::cmd::Command {
+    //     let v = vec![common::G3_SERIAL_MSG_ADP_DISCOVERY_REQUEST, self.duration];
+    //     usi::cmd::Command::new(usi::common::PROTOCOL_ADP_G3, &v)
+    // }
+    fn try_into(self) -> Result<usi::UsiCommand, Self::Error> {
+        let v = [message::G3_SERIAL_MSG_ADP_NETWORK_START_REQUEST, (self.pan_id >> 8) as u8, (self.pan_id & 0xFF) as u8];
+        Ok(UsiCommand::new(common::PROTOCOL_ADP_G3, &v.to_vec()))
+    }
+
+}
+
 pub struct AdpGetRequest {
     attribute_id: message::EAdpPibAttribute, 
     attribute_idx: u16
@@ -101,14 +123,70 @@ impl TryInto<usi::UsiCommand> for AdpSetRequest{
             ((attribute >> 8) & 0xFF) as u8,
             ((attribute) & 0xFF) as u8,
             (self.attribute_idx >> 8) as u8,
-            (self.attribute_idx & 0xFF) as u8);
+            (self.attribute_idx & 0xFF) as u8, (self.attribute_value.len() as u8));
         for ch in self.attribute_value {
             v.push(ch);
         }
         Ok(UsiCommand::new(common::PROTOCOL_ADP_G3, &v.to_vec()))
     }
+}
 
+pub struct AdpMacGetRequest {
+    attribute_id: message::EMacWrpPibAttribute, 
+    attribute_idx: u16
+}
+impl  AdpMacGetRequest  {
+    pub fn new (attribute_id: message::EMacWrpPibAttribute, attribute_idx: u16) -> AdpMacGetRequest {
+        AdpMacGetRequest{
+            attribute_id, attribute_idx
+        }
+    }
+}
 
+impl TryInto<usi::UsiCommand> for AdpMacGetRequest{
+    type Error = ();
+    fn try_into(self) -> Result<usi::UsiCommand, Self::Error> {
+        let attribute: u32 = self.attribute_id.into();
+        let v = [message::G3_SERIAL_MSG_ADP_MAC_GET_REQUEST, 
+            ((attribute >> 24) & 0xFF) as u8,
+            ((attribute >> 16) & 0xFF) as u8,
+            ((attribute >> 8) & 0xFF) as u8,
+            ((attribute) & 0xFF) as u8,
+            (self.attribute_idx >> 8) as u8,
+            (self.attribute_idx & 0xFF) as u8];
+        Ok(UsiCommand::new(common::PROTOCOL_ADP_G3, &v.to_vec()))
+    }
+}
+
+pub struct AdpMacSetRequest {
+    attribute_id: message::EMacWrpPibAttribute, 
+    attribute_idx: u16,
+    attribute_value: Vec<u8>
+}
+impl  AdpMacSetRequest  {
+    pub fn new (attribute_id: message::EMacWrpPibAttribute, attribute_idx: u16, attribute_value:Vec<u8>) -> AdpMacSetRequest {
+        AdpMacSetRequest{
+            attribute_id, attribute_idx, attribute_value
+        }
+    }
+}
+
+impl TryInto<usi::UsiCommand> for AdpMacSetRequest{
+    type Error = ();
+    fn try_into(self) -> Result<usi::UsiCommand, Self::Error> {
+        let attribute: u32 = self.attribute_id.into();
+        let mut v = vec!(message::G3_SERIAL_MSG_ADP_MAC_SET_REQUEST, 
+            ((attribute >> 24) & 0xFF) as u8,
+            ((attribute >> 16) & 0xFF) as u8,
+            ((attribute >> 8) & 0xFF) as u8,
+            ((attribute) & 0xFF) as u8,
+            (self.attribute_idx >> 8) as u8,
+            (self.attribute_idx & 0xFF) as u8, self.attribute_value.len() as u8);
+        for ch in self.attribute_value {
+            v.push(ch);
+        }
+        Ok(UsiCommand::new(common::PROTOCOL_ADP_G3, &v.to_vec()))
+    }
 }
 
 pub struct AdpDataRequest {    
