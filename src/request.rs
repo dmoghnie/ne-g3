@@ -1,7 +1,7 @@
 use crate::common;
 use crate::message;
 use crate::usi;
-use crate::usi::UsiCommand;
+use crate::usi::OutMessage;
 
 #[derive(Debug)]
 pub struct AdpInitializeRequest {    
@@ -18,11 +18,11 @@ impl AdpInitializeRequest {
     }
 }
 
-impl TryInto<usi::UsiCommand> for AdpInitializeRequest {
+impl TryInto<usi::OutMessage> for AdpInitializeRequest {
     type Error = ();
-    fn try_into(self) -> Result<usi::UsiCommand, Self::Error> {
+    fn try_into(self) -> Result<usi::OutMessage, Self::Error> {
         let v = [message::G3_SERIAL_MSG_ADP_INITIALIZE, self.band];        
-        Ok(UsiCommand::new(common::PROTOCOL_ADP_G3, &v.to_vec()))
+        Ok(OutMessage::new(common::PROTOCOL_ADP_G3, &v.to_vec()))
     }
 }
 
@@ -36,15 +36,15 @@ impl AdpDiscoveryRequest {
         AdpDiscoveryRequest { duration}
     }
 }
-impl TryInto<usi::UsiCommand> for AdpDiscoveryRequest {
+impl TryInto<usi::OutMessage> for AdpDiscoveryRequest {
     type Error=();
     // fn to_command (&self) -> usi::cmd::Command {
     //     let v = vec![common::G3_SERIAL_MSG_ADP_DISCOVERY_REQUEST, self.duration];
     //     usi::cmd::Command::new(usi::common::PROTOCOL_ADP_G3, &v)
     // }
-    fn try_into(self) -> Result<usi::UsiCommand, Self::Error> {
+    fn try_into(self) -> Result<usi::OutMessage, Self::Error> {
         let v = [message::G3_SERIAL_MSG_ADP_DISCOVERY_REQUEST, self.duration];
-        Ok(UsiCommand::new(common::PROTOCOL_ADP_G3, &v.to_vec()))
+        Ok(OutMessage::new(common::PROTOCOL_ADP_G3, &v.to_vec()))
     }
 
 }
@@ -58,15 +58,15 @@ impl AdpNetworkStartRequest {
         AdpNetworkStartRequest { pan_id}
     }
 }
-impl TryInto<usi::UsiCommand> for AdpNetworkStartRequest {
+impl TryInto<usi::OutMessage> for AdpNetworkStartRequest {
     type Error=();
     // fn to_command (&self) -> usi::cmd::Command {
     //     let v = vec![common::G3_SERIAL_MSG_ADP_DISCOVERY_REQUEST, self.duration];
     //     usi::cmd::Command::new(usi::common::PROTOCOL_ADP_G3, &v)
     // }
-    fn try_into(self) -> Result<usi::UsiCommand, Self::Error> {
+    fn try_into(self) -> Result<usi::OutMessage, Self::Error> {
         let v = [message::G3_SERIAL_MSG_ADP_NETWORK_START_REQUEST, (self.pan_id >> 8) as u8, (self.pan_id & 0xFF) as u8];
-        Ok(UsiCommand::new(common::PROTOCOL_ADP_G3, &v.to_vec()))
+        Ok(OutMessage::new(common::PROTOCOL_ADP_G3, &v.to_vec()))
     }
 
 }
@@ -83,9 +83,9 @@ impl  AdpGetRequest  {
     }
 }
 
-impl TryInto<usi::UsiCommand> for AdpGetRequest{
+impl TryInto<usi::OutMessage> for AdpGetRequest{
     type Error = ();
-    fn try_into(self) -> Result<usi::UsiCommand, Self::Error> {
+    fn try_into(self) -> Result<usi::OutMessage, Self::Error> {
         let attribute: u32 = self.attribute_id.into();
         let v = [message::G3_SERIAL_MSG_ADP_GET_REQUEST, 
             ((attribute >> 24) & 0xFF) as u8,
@@ -94,7 +94,7 @@ impl TryInto<usi::UsiCommand> for AdpGetRequest{
             ((attribute) & 0xFF) as u8,
             (self.attribute_idx >> 8) as u8,
             (self.attribute_idx & 0xFF) as u8];
-        Ok(UsiCommand::new(common::PROTOCOL_ADP_G3, &v.to_vec()))
+        Ok(OutMessage::new(common::PROTOCOL_ADP_G3, &v.to_vec()))
     }
 
 
@@ -113,9 +113,9 @@ impl  AdpSetRequest  {
     }
 }
 
-impl TryInto<usi::UsiCommand> for AdpSetRequest{
+impl TryInto<usi::OutMessage> for AdpSetRequest{
     type Error = ();
-    fn try_into(self) -> Result<usi::UsiCommand, Self::Error> {
+    fn try_into(self) -> Result<usi::OutMessage, Self::Error> {
         let attribute: u32 = self.attribute_id.into();
         let mut v = vec!(message::G3_SERIAL_MSG_ADP_SET_REQUEST, 
             ((attribute >> 24) & 0xFF) as u8,
@@ -127,7 +127,7 @@ impl TryInto<usi::UsiCommand> for AdpSetRequest{
         for ch in self.attribute_value {
             v.push(ch);
         }
-        Ok(UsiCommand::new(common::PROTOCOL_ADP_G3, &v.to_vec()))
+        Ok(OutMessage::new(common::PROTOCOL_ADP_G3, &v.to_vec()))
     }
 }
 
@@ -143,9 +143,9 @@ impl  AdpMacGetRequest  {
     }
 }
 
-impl TryInto<usi::UsiCommand> for AdpMacGetRequest{
+impl TryInto<usi::OutMessage> for AdpMacGetRequest{
     type Error = ();
-    fn try_into(self) -> Result<usi::UsiCommand, Self::Error> {
+    fn try_into(self) -> Result<usi::OutMessage, Self::Error> {
         let attribute: u32 = self.attribute_id.into();
         let v = [message::G3_SERIAL_MSG_ADP_MAC_GET_REQUEST, 
             ((attribute >> 24) & 0xFF) as u8,
@@ -154,7 +154,7 @@ impl TryInto<usi::UsiCommand> for AdpMacGetRequest{
             ((attribute) & 0xFF) as u8,
             (self.attribute_idx >> 8) as u8,
             (self.attribute_idx & 0xFF) as u8];
-        Ok(UsiCommand::new(common::PROTOCOL_ADP_G3, &v.to_vec()))
+        Ok(OutMessage::new(common::PROTOCOL_ADP_G3, &v.to_vec()))
     }
 }
 
@@ -171,9 +171,9 @@ impl  AdpMacSetRequest  {
     }
 }
 
-impl TryInto<usi::UsiCommand> for AdpMacSetRequest{
+impl TryInto<usi::OutMessage> for AdpMacSetRequest{
     type Error = ();
-    fn try_into(self) -> Result<usi::UsiCommand, Self::Error> {
+    fn try_into(self) -> Result<usi::OutMessage, Self::Error> {
         let attribute: u32 = self.attribute_id.into();
         let mut v = vec!(message::G3_SERIAL_MSG_ADP_MAC_SET_REQUEST, 
             ((attribute >> 24) & 0xFF) as u8,
@@ -185,7 +185,7 @@ impl TryInto<usi::UsiCommand> for AdpMacSetRequest{
         for ch in self.attribute_value {
             v.push(ch);
         }
-        Ok(UsiCommand::new(common::PROTOCOL_ADP_G3, &v.to_vec()))
+        Ok(OutMessage::new(common::PROTOCOL_ADP_G3, &v.to_vec()))
     }
 }
 
@@ -202,9 +202,9 @@ impl AdpDataRequest {
     }
 }
 
-impl TryInto<usi::UsiCommand> for AdpDataRequest {
+impl TryInto<usi::OutMessage> for AdpDataRequest {
     type Error = ();
-    fn try_into(self) -> Result<usi::UsiCommand, Self::Error> {
+    fn try_into(self) -> Result<usi::OutMessage, Self::Error> {
         let mut v = vec![message::G3_SERIAL_MSG_ADP_DATA_REQUEST, self.handle, 
             self.discover_route as u8, self.quality_of_service,
             (self.data.len() >> 8) as u8,
@@ -212,6 +212,6 @@ impl TryInto<usi::UsiCommand> for AdpDataRequest {
        for ch in self.data {
            v.push(ch);
        }
-        Ok(UsiCommand::new(common::PROTOCOL_ADP_G3, &v))
+        Ok(OutMessage::new(common::PROTOCOL_ADP_G3, &v))
     }
 }

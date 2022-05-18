@@ -1,7 +1,8 @@
 use crate::usi;
 use num_enum::IntoPrimitive;
 use num_enum::TryFromPrimitive;
-use usi::UsiMessage;
+use usi::InMessage;
+use std::fmt;
 
 pub const G3_SERIAL_MSG_STATUS: u8 = 0;
 
@@ -112,7 +113,34 @@ pub const G3_SERIAL_MSG_MAC_SNIFFER_INDICATION: u8 =
 pub const ADP_ADDRESS_16BITS: i32 = 2;
 pub const ADP_ADDRESS_64BITS: i32 = 8;
 
-use std::fmt;
+// /// The LBD requests joining a PAN and provides the necessary authentication material.
+// #define LBP_JOINING 0x01
+
+// /// Authentication succeeded with delivery of device specific information (DSI) to the LBD
+// #define LBP_ACCEPTED 0x09
+
+// /// Authentication in progress. PAN specific information (PSI) may be delivered to the LBD
+// #define LBP_CHALLENGE 0x0A
+
+// /// Authentication failed
+// #define LBP_DECLINE 0x0B
+
+// /// KICK frame is used by any device to inform the coordinator that it left the PAN.
+// #define LBP_KICK_FROM_LBD 0x04
+
+// /// KICK frame is used by a PAN coordinator to force a device to lose its MAC address
+// #define LBP_KICK_TO_LBD 0x0C
+
+#[derive(Debug, Eq, PartialEq, TryFromPrimitive, IntoPrimitive)]
+#[repr(u8)]
+pub enum LbpMessageType {
+    LBP_JOINING = 0x01,
+    LBP_ACCEPTED = 0x09,
+    LBP_CHALLENGE = 0x0A,
+    LBP_DECLINE = 0x0B,
+    LBP_KICK_FROM_LBD = 0x04,
+    LBP_KICK_TO_LBD = 0x0C
+}
 
 pub enum EAdpMac_Modulation {
     MOD_ROBO = 0,
@@ -275,6 +303,8 @@ pub enum EAdpPibAttribute {
     ADP_IB_MANUF_GET_BAND_CONTEXT_TONES = 0x080000D9,
     ADP_IB_MANUF_UPDATE_NON_VOLATILE_DATA = 0x080000DA,
     ADP_IB_MANUF_DISCOVER_ROUTE_GLOBAL_SEQ_NUM = 0x080000DB,
+
+    INVALID = 0xFFFFFFFF
 }
 #[derive(Debug, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Hash)]
 #[repr(u32)]
@@ -400,7 +430,7 @@ pub enum EMacWrpPibAttribute {
     MAC_WRP_PIB_MANUF_PHY_PARAM = 0x08000020,
 }
 
-pub fn usi_message_to_message(msg: &UsiMessage) -> Option<Message> {
+pub fn usi_message_to_message(msg: &InMessage) -> Option<Message> {
     {
         if let Some(cmd) = msg.buf.get(0) {
             match *cmd {
@@ -580,7 +610,7 @@ pub struct MsgStatusResponse {
 }
 
 impl MsgStatusResponse {
-    pub fn try_from_message(msg: &usi::UsiMessage) -> Option<MsgStatusResponse> {
+    pub fn try_from_message(msg: &usi::InMessage) -> Option<MsgStatusResponse> {
         if msg.buf.len() > 0 {
             //cmd is the first byte???
             //Add one byte for cmd
@@ -594,7 +624,6 @@ impl MsgStatusResponse {
     }
 }
 
-#[derive(Debug)]
 pub struct GetResponse {
     pub status: EAdpStatus,
     pub attribute_id: u32,
@@ -605,7 +634,7 @@ pub struct GetResponse {
 
 const MIN_GET_RESPONSE_LEN: usize = 8;
 impl GetResponse {
-    pub fn try_from_message(msg: &usi::UsiMessage) -> Option<GetResponse> {
+    pub fn try_from_message(msg: &usi::InMessage) -> Option<GetResponse> {
         if msg.buf.len() >= MIN_GET_RESPONSE_LEN + 1 {
             //Add one byte for cmd
             if let Ok(status) = EAdpStatus::try_from(msg.buf[1]) {
@@ -643,6 +672,17 @@ impl GetResponse {
     }
 }
 
+impl fmt::Debug for GetResponse {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("GetResponse")
+            .field("status", &self.status)
+            .field("attribute id", &EAdpPibAttribute::try_from_primitive(self.attribute_id).unwrap_or(EAdpPibAttribute::INVALID))
+            .field("attribute index", &self.attribute_idx)
+            .field("attribute value", &self.attribute_val)
+            .finish()
+    }
+}
+
 #[derive(Debug)]
 pub struct GetMacResponse {
     pub status: EAdpStatus,
@@ -654,7 +694,7 @@ pub struct GetMacResponse {
 
 const MIN_GET_MAC_RESPONSE_LEN: usize = 8;
 impl GetMacResponse {
-    pub fn try_from_message(msg: &usi::UsiMessage) -> Option<GetMacResponse> {
+    pub fn try_from_message(msg: &usi::InMessage) -> Option<GetMacResponse> {
         if msg.buf.len() >= MIN_GET_RESPONSE_LEN + 1 {
             //Add one byte for cmd
             if let Ok(status) = EAdpStatus::try_from(msg.buf[1]) {
@@ -715,7 +755,7 @@ pub struct DiscoveryEvent {
 }
 
 impl DiscoveryEvent {
-    pub fn try_from_message(msg: &usi::UsiMessage) -> Option<DiscoveryEvent> {
+    pub fn try_from_message(msg: &usi::InMessage) -> Option<DiscoveryEvent> {
         if msg.buf.len() == DISCOVERY_EVENT_LEN + 1 {
             //Add one byte for cmd
             let pan_id = (msg.buf[1] as u16) << 8 | (msg.buf[2] as u16);
@@ -763,7 +803,7 @@ pub struct SetMacResponse {
     attribute_idx: u16,
 }
 impl SetMacResponse {
-    pub fn try_from_message(msg: &usi::UsiMessage) -> Option<SetMacResponse> {
+    pub fn try_from_message(msg: &usi::InMessage) -> Option<SetMacResponse> {
         if msg.buf.len() == SET_RESPONSE_LEN + 1 {
             //Add one byte for cmd
             if let Ok(status) = EAdpStatus::try_from(msg.buf[1]) {
@@ -789,7 +829,7 @@ pub struct SetResponse {
 }
 
 impl SetResponse {
-    pub fn try_from_message(msg: &usi::UsiMessage) -> Option<SetResponse> {
+    pub fn try_from_message(msg: &usi::InMessage) -> Option<SetResponse> {
         if msg.buf.len() == SET_RESPONSE_LEN + 1 {
             //Add one byte for cmd
             if let Ok(status) = EAdpStatus::try_from(msg.buf[1]) {
@@ -810,7 +850,7 @@ impl fmt::Debug for SetResponse {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SetResponse")
             .field("status", &self.status)
-            .field("attribute id", &self.attribute_id)
+            .field("attribute id", &EAdpPibAttribute::try_from_primitive(self.attribute_id).unwrap_or(EAdpPibAttribute::INVALID))
             .field("attribute index", &self.attribute_idx)
             .finish()
     }
@@ -821,7 +861,7 @@ pub struct NetworkStartResponse {
     status: EAdpStatus,
 }
 impl NetworkStartResponse {
-    pub fn try_from_message(msg: &usi::UsiMessage) -> Option<NetworkStartResponse> {
+    pub fn try_from_message(msg: &usi::InMessage) -> Option<NetworkStartResponse> {
         if msg.buf.len() > 1 {
             //Add one byte for cmd
             if let Ok(status) = EAdpStatus::try_from(msg.buf[1]) {
@@ -837,7 +877,7 @@ pub struct DiscoveryResponse {
     status: EAdpStatus,
 }
 impl DiscoveryResponse {
-    pub fn try_from_message(msg: &usi::UsiMessage) -> Option<DiscoveryResponse> {
+    pub fn try_from_message(msg: &usi::InMessage) -> Option<DiscoveryResponse> {
         if msg.buf.len() > 1 {
             //Add one byte for cmd
             if let Ok(status) = EAdpStatus::try_from(msg.buf[1]) {
@@ -855,7 +895,7 @@ pub struct DataResponse {
     nsdu_handle: u8,
 }
 impl DataResponse {
-    pub fn try_from_message(msg: &usi::UsiMessage) -> Option<DataResponse> {
+    pub fn try_from_message(msg: &usi::InMessage) -> Option<DataResponse> {
         if let (Some(&status8), Some(&nsdu_handle)) = (msg.buf.get(1), msg.buf.get(2)) {
             if let Ok(status) = EAdpStatus::try_from(status8) {
                 return Some(DataResponse {

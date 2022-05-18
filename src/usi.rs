@@ -14,16 +14,16 @@ use crate::usi;
 
 use crate::message;
 // use crossbeam_channel::{bounded, Sender};
-use std::thread::spawn;
+
 //use std::sync::mpsc::{Sender, channel};
 
 //TODO, this is a half duplex implementation, one thread for rx/tx.
 //When receiving, we timeout in x time and check the incoming channel for pending requests
 
 #[derive(Debug)]
-pub enum MessageType {
-    UsiMessage(UsiMessage),
-    UsiCommand(UsiCommand),
+pub enum Message {
+    UsiIn(InMessage),
+    UsiOut(OutMessage),
     HeartBeat(SystemTime),
     SystemStartup
 }
@@ -40,14 +40,14 @@ enum RxState {
 pub const RECEIVE_TIMEOUT:Duration = Duration::from_millis(10);
 
 #[derive(Debug)]
-pub struct UsiCommand {
+pub struct OutMessage {
     protocol: u8,
     data: Vec<u8>,
 }
 
-impl UsiCommand {
-    pub fn new(protocol: u8, data: &Vec<u8>) -> UsiCommand {
-        UsiCommand {
+impl OutMessage {
+    pub fn new(protocol: u8, data: &Vec<u8>) -> OutMessage {
+        OutMessage {
             protocol: protocol,
             data: data.to_vec(),
         }
@@ -136,20 +136,20 @@ impl UsiCommand {
 }
 
 pub trait UsiSender {
-    fn send(&mut self, cmd: &UsiCommand) -> std::result::Result<(), String>;
+    fn send(&mut self, cmd: &OutMessage) -> std::result::Result<(), String>;
 }
 
 #[derive(Clone, Debug)]
-pub struct UsiMessage {
+pub struct InMessage {
     pub buf: Vec<u8>,
     rxState: RxState,
     pub protocol_type: Option<u8>,
     payload_len: usize
 }
 
-impl UsiMessage {
+impl InMessage {
     pub fn new() -> Self {
-        UsiMessage {
+        InMessage {
             rxState: RxState::RxIdle,
             buf: Vec::with_capacity(1024),
             payload_len: 0,
@@ -316,18 +316,18 @@ pub enum PortState {
 }
 
 pub struct Port<'a, T> {
-    message: usi::UsiMessage,
+    message: usi::InMessage,
     buf: VecDeque<u8>,
     channel: T,    
     state: &'a PortState,
-    listeners: Vec<flume::Sender<MessageType>>
+    listeners: Vec<flume::Sender<Message>>
 }
 
 //thread object should be static, makes sense! Since threads may live for the duration of the program
 impl<'a, T: Read + Write + Send> Port<'a, T> where 'a: 'static, T:'static { 
     pub fn new(channel: T) -> Port<'a, T> {
         Port {
-            message: usi::UsiMessage::new(),
+            message: usi::InMessage::new(),
             buf: VecDeque::with_capacity(2048),
             channel: channel,                    
             state: &PortState::Stopped,
@@ -337,7 +337,7 @@ impl<'a, T: Read + Write + Send> Port<'a, T> where 'a: 'static, T:'static {
     // pub fn post_cmd(&self, cmd: &'a MessageType) {
     //     self.cmd_tx_rx.0.send(cmd);
     // }
-    pub fn add_listener(&mut self, listener: flume::Sender<MessageType>) {
+    pub fn add_listener(&mut self, listener: flume::Sender<Message>) {
         self.listeners.push (listener);
     }    
 
@@ -364,16 +364,16 @@ impl<'a, T: Read + Write + Send> Port<'a, T> where 'a: 'static, T:'static {
                     usi::RxState::RxDone => {
                         self.message.remove_header_and_crc();
                         for listener in &self.listeners {
-                            listener.send(usi::MessageType::UsiMessage(self.message.clone()));
+                            listener.send(usi::Message::UsiIn(self.message.clone()));
                         }                        
                         // if let Some(ref sender) = sender {
                         //     sender.send(self.message.clone());
                         // }
-                        self.message = usi::UsiMessage::new();
+                        self.message = usi::InMessage::new();
                     }
                     usi::RxState::RxError => {
                         log::warn!("Failed to parse message : RxError");
-                        self.message = usi::UsiMessage::new();
+                        self.message = usi::InMessage::new();
                     }
                     _ => {}
                 }
@@ -387,7 +387,7 @@ impl<'a, T: Read + Write + Send> Port<'a, T> where 'a: 'static, T:'static {
 }
 
 impl<'a, T: Read + Write + Send> UsiSender for Port<'a, T> {
-    fn send(&mut self, cmd: &UsiCommand) -> std::result::Result<(), String> {
+    fn send(&mut self, cmd: &OutMessage) -> std::result::Result<(), String> {
         if let Some(buf) = cmd.to_usi() {
             log::trace!("--> {}", common::to_hex_string(&buf));
             match self.channel.write_all(&buf) {

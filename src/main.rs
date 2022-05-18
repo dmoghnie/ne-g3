@@ -25,7 +25,7 @@ extern crate env_logger;
 
 use log::Level;
 
-use crate::usi::{UsiSender, UsiCommand, MessageType};
+use crate::usi::{UsiSender, OutMessage, Message};
 
 
 const TIMER_RESOLUTION:Duration = Duration::from_millis(10000);
@@ -43,8 +43,8 @@ fn main() {
     .timeout(Duration::from_millis(10))
     .open().expect("Failed to open port {}");
 
-    let (app_tx, app_rx) = flume::unbounded::<(MessageType)>();
-    let (usi_tx, usi_rx) = flume::unbounded::<MessageType>();
+    let (app_tx, app_rx) = flume::unbounded::<(Message)>();
+    let (usi_tx, usi_rx) = flume::unbounded::<Message>();
         
     // let request = request::AdpInitializeRequest::from_band(message::TAdpBand::ADP_BAND_CENELEC_A);
     let sender = app_tx.clone();
@@ -57,7 +57,7 @@ fn main() {
             match usi_rx.recv_timeout(usi::RECEIVE_TIMEOUT) {
                 Ok(msg) => {
                     match msg {
-                        MessageType::UsiCommand(cmd) => {
+                        Message::UsiOut(cmd) => {
                             usi_port.send(&cmd);
                         },
                         _=> {
@@ -92,10 +92,10 @@ fn main() {
     });
 
     let system_tx = app_tx.clone();
-    system_tx.send (MessageType::SystemStartup);
+    system_tx.send (Message::SystemStartup);
     let system_handle = thread::spawn(move || {
         loop {
-            system_tx.send(MessageType::HeartBeat(SystemTime::now()));
+            system_tx.send(Message::HeartBeat(SystemTime::now()));
             thread::sleep(TIMER_RESOLUTION);
         }
     });

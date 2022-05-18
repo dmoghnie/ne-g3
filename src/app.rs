@@ -24,22 +24,22 @@ trait StateImpl{
 
 pub struct App<'a> {    
     state: Option<Box<dyn StateImpl>>,    
-    cmd_tx: &'a flume::Sender<usi::MessageType>
+    cmd_tx: &'a flume::Sender<usi::Message>
 }
 
 impl <'a> App<'a>{
-    pub fn new(cmd_tx: &'a flume::Sender<usi::MessageType>) -> Self {
+    pub fn new(cmd_tx: &'a flume::Sender<usi::Message>) -> Self {
         App {
             state: None,            
             cmd_tx: cmd_tx,
         }
     }
 
-    pub fn process_msg(&mut self, msg: &usi::MessageType) -> bool{
+    pub fn process_msg(&mut self, msg: &usi::Message) -> bool{
         log::trace!("App processing message {:?}", msg);
         if let Some(s) = &self.state {            
             match msg {
-                usi::MessageType::UsiMessage(msg) => {
+                usi::Message::UsiIn(msg) => {
                     if let Some(m) = message::usi_message_to_message (msg){
                         let new_state = s.on_msg(self,&m);
                         if new_state.is_none() {
@@ -65,10 +65,10 @@ impl <'a> App<'a>{
                     }
     
                 }
-                usi::MessageType::UsiCommand(_) => {
+                usi::Message::UsiOut(_) => {
                     log::warn!("App received a UsiCommand");
                 }, 
-                usi::MessageType::HeartBeat(time) => {
+                usi::Message::HeartBeat(time) => {
                     log::trace!("Adp received heartbeat {:?}", time);
                 },
                 _ =>{
@@ -77,7 +77,7 @@ impl <'a> App<'a>{
             }            
         }else{
             match msg {
-                usi::MessageType::SystemStartup => {
+                usi::Message::SystemStartup => {
                     self.state = Some(Box::new(Start{}));
                     if let Some(s) = &self.state {
                         s.on_enter(self);
@@ -101,7 +101,7 @@ impl StateImpl for Start {
     fn on_enter(&self, app: &App) {
         let cmd = request::AdpInitializeRequest::from_band(message::TAdpBand::ADP_BAND_CENELEC_A);	//TODO parameterize
         if let Ok(c) = cmd.try_into() {
-            app.cmd_tx.send (usi::MessageType::UsiCommand(c));
+            app.cmd_tx.send (usi::Message::UsiOut(c));
         } 
     }
 
@@ -140,11 +140,13 @@ impl SetupParameters {
     pub fn new () -> SetupParameters{        
         let parameters = Rc::new(RefCell::new(Vec::with_capacity(10)));
         
+        parameters.borrow_mut().push(Parameter::new(common::PROTOCOL_ADP_G3, message::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL.into(), 0, [0x0].to_vec()));
+
         let mut v = vec![0x31, 0x30, 0x36, 0x33, 0x4C, 0x50, 0x54, 0x41];
         v.reverse();
-        parameters.borrow_mut().push(Parameter::new(common::PROTOCOL_ADP_G3, message::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL.into(), 0, [0x0].to_vec()));
-        parameters.borrow_mut().push(Parameter::new (common::PROTOCOL_MAC_G3, message::EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_EXTENDED_ADDRESS.into(), 
-                    0, v));
+        
+        // parameters.borrow_mut().push(Parameter::new (common::PROTOCOL_MAC_G3, message::EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_EXTENDED_ADDRESS.into(), 
+        //             0, v));
 
         parameters.borrow_mut().push(Parameter::new (common::PROTOCOL_MAC_G3, message::EMacWrpPibAttribute::MAC_WRP_PIB_SHORT_ADDRESS.into(), 0, vec![0x0, 0x0]));
         
@@ -170,7 +172,7 @@ impl SetupParameters {
             common::PROTOCOL_ADP_G3 => {
                 if let Ok(attribute) = message::EAdpPibAttribute::try_from_primitive(p.id) {
                     if let Ok(c) = request::AdpSetRequest::new (attribute, p.idx, p.value).try_into(){
-                        app.cmd_tx.send(usi::MessageType::UsiCommand(c));
+                        app.cmd_tx.send(usi::Message::UsiOut(c));
                     }    
                 }
         
@@ -178,7 +180,7 @@ impl SetupParameters {
             common::PROTOCOL_MAC_G3 => {
                 if let Ok(attribute) = message::EMacWrpPibAttribute::try_from_primitive(p.id) {
                     if let Ok(c) = request::AdpMacSetRequest::new (attribute, p.idx, p.value).try_into(){
-                        app.cmd_tx.send(usi::MessageType::UsiCommand(c));
+                        app.cmd_tx.send(usi::Message::UsiOut(c));
                     }    
                 }
             },
@@ -226,7 +228,7 @@ impl StateImpl for Idle {
     fn on_enter(&self, app: &App) {
         let discovery = request::AdpDiscoveryRequest::new(SCAN_DURATION);
         if let Ok(c) = discovery.try_into() {
-            app.cmd_tx.send (usi::MessageType::UsiCommand(c));
+            app.cmd_tx.send (usi::Message::UsiOut(c));
         }   
     }
 
@@ -253,7 +255,7 @@ impl StateImpl for SetSecurityLevel {
     fn on_enter(&self, app: &App) {
         let c = request::AdpSetRequest::new (message::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY, 0, vec![0;16]);
         if let Ok(c) = c.try_into() {
-            app.cmd_tx.send (usi::MessageType::UsiCommand(c));
+            app.cmd_tx.send (usi::Message::UsiOut(c));
         }  
         
     }
@@ -277,7 +279,7 @@ impl StateImpl for GetVersion {
     fn on_enter(&self, app: &App) {
         let get_version = request::AdpGetRequest::new (message::EAdpPibAttribute::ADP_IB_SOFT_VERSION, 0);
         if let Ok(c) = get_version.try_into() {
-            app.cmd_tx.send (usi::MessageType::UsiCommand(c));
+            app.cmd_tx.send (usi::Message::UsiOut(c));
         }  
         
     }
@@ -305,35 +307,35 @@ impl StateImpl for GetEUI64 {
 
         let get_eui64 = request::AdpMacGetRequest::new (message::EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_EXTENDED_ADDRESS, 0);
         if let Ok(c) = get_eui64.try_into() {
-            app.cmd_tx.send (usi::MessageType::UsiCommand(c));
+            app.cmd_tx.send (usi::Message::UsiOut(c));
         }  
         if let Ok(c) = request::AdpMacGetRequest::new(message::EMacWrpPibAttribute::MAC_WRP_PIB_SHORT_ADDRESS, 0).try_into() {
-            app.cmd_tx.send(usi::MessageType::UsiCommand(c));
+            app.cmd_tx.send(usi::Message::UsiOut(c));
         }
         if let Ok(c) = request::AdpMacGetRequest::new(message::EMacWrpPibAttribute::MAC_WRP_PIB_SHORT_ADDRESS, 0).try_into() {
-            app.cmd_tx.send(usi::MessageType::UsiCommand(c));
+            app.cmd_tx.send(usi::Message::UsiOut(c));
         }
         if let Ok(c) = request::AdpGetRequest::new (message::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 0).try_into(){
-            app.cmd_tx.send(usi::MessageType::UsiCommand(c));
+            app.cmd_tx.send(usi::Message::UsiOut(c));
         }
         if let Ok(c) = request::AdpGetRequest::new (message::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 1).try_into(){
-            app.cmd_tx.send(usi::MessageType::UsiCommand(c));
+            app.cmd_tx.send(usi::Message::UsiOut(c));
         }
         if let Ok(c) = request::AdpGetRequest::new (message::EAdpPibAttribute::ADP_IB_ROUTING_TABLE_ENTRY_TTL, 0).try_into(){
-            app.cmd_tx.send(usi::MessageType::UsiCommand(c));
+            app.cmd_tx.send(usi::Message::UsiOut(c));
         }
         if let Ok(c) = request::AdpGetRequest::new (message::EAdpPibAttribute::ADP_IB_MAX_JOIN_WAIT_TIME, 0).try_into(){
-            app.cmd_tx.send(usi::MessageType::UsiCommand(c));
+            app.cmd_tx.send(usi::Message::UsiOut(c));
         }
         if let Ok(c) = request::AdpGetRequest::new (message::EAdpPibAttribute::ADP_IB_MAX_HOPS, 0).try_into(){
-            app.cmd_tx.send(usi::MessageType::UsiCommand(c));
+            app.cmd_tx.send(usi::Message::UsiOut(c));
         }
         if let Ok(c) = request::AdpGetRequest::new (message::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY, 0).try_into(){
-            app.cmd_tx.send(usi::MessageType::UsiCommand(c));
+            app.cmd_tx.send(usi::Message::UsiOut(c));
         }
-        // if let Ok(c) = request::AdpGetRequest::new (message::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL, 0).try_into(){
-        //     app.cmd_tx.send(usi::MessageType::UsiCommand(c));
-        // }
+        if let Ok(c) = request::AdpGetRequest::new (message::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL, 0).try_into(){
+            app.cmd_tx.send(usi::Message::UsiOut(c));
+        }
         
     }
 
@@ -357,13 +359,13 @@ impl StateImpl for NetworkStart {
     fn on_enter(&self, app: &App) {
         let network_start = request::AdpNetworkStartRequest::new (1234);
         if let Ok(c) = network_start.try_into() {
-            app.cmd_tx.send (usi::MessageType::UsiCommand(c));
+            app.cmd_tx.send (usi::Message::UsiOut(c));
         }  
     }
 
     fn on_msg (&self, app: &App, msg:&message::Message) -> Option<Box<dyn StateImpl>> {
         log::trace!("state {}, msg {:?}", self.get_name(), msg);
-        None
+        Some(Box::new(GetEUI64{}))
     }
 
     fn on_exit(&self, app: &App) {
@@ -383,7 +385,7 @@ impl StateImpl for GetAttributes {
     fn on_enter(&self, app: &App) {
         let get_eui64 = request::AdpMacGetRequest::new (message::EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_EXTENDED_ADDRESS, 0);
         if let Ok(c) = get_eui64.try_into() {
-            app.cmd_tx.send (usi::MessageType::UsiCommand(c));
+            app.cmd_tx.send (usi::Message::UsiOut(c));
         }  
     }
 
@@ -403,7 +405,6 @@ impl StateImpl for GetAttributes {
             },
             _ => {}
         }
-        // Some(Box::new(&GetAttributes {extended_address: self.extended_address.clone()}))
         None
     }
 
