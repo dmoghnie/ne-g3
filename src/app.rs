@@ -8,17 +8,19 @@ use serialport::Error;
 use serialport::new;
 
 use crate::usi;
+use crate::lbp;
 use crate::request;
 use crate::common;
-use crate::message;
+use crate::adp;
 use num_enum::*;
+
 
 const SCAN_DURATION:u8 = 2;
 
 trait StateImpl{
     fn get_name(&self)->&str;
     fn on_enter(&self, app: &App);
-    fn on_msg (&self, app: &App, msg:&message::Message) -> Option<Box<dyn StateImpl>>;
+    fn on_msg (&self, app: &App, msg:&adp::Message) -> Option<Box<dyn StateImpl>>;
     fn on_exit(&self, app: &App);
 }
 
@@ -40,7 +42,7 @@ impl <'a> App<'a>{
         if let Some(s) = &self.state {            
             match msg {
                 usi::Message::UsiIn(msg) => {
-                    if let Some(m) = message::usi_message_to_message (msg){
+                    if let Some(m) = adp::usi_message_to_message (msg){
                         let new_state = s.on_msg(self,&m);
                         if new_state.is_none() {
                             log::trace!("State {}, on exit", s.get_name());
@@ -99,13 +101,13 @@ struct Start {
 impl StateImpl for Start {
 
     fn on_enter(&self, app: &App) {
-        let cmd = request::AdpInitializeRequest::from_band(message::TAdpBand::ADP_BAND_CENELEC_A);	//TODO parameterize
+        let cmd = request::AdpInitializeRequest::from_band(adp::TAdpBand::ADP_BAND_CENELEC_A);	//TODO parameterize
         if let Ok(c) = cmd.try_into() {
             app.cmd_tx.send (usi::Message::UsiOut(c));
         } 
     }
 
-    fn on_msg (&self, app: &App, msg:&message::Message) -> Option<Box<dyn StateImpl>> {
+    fn on_msg (&self, app: &App, msg:&adp::Message) -> Option<Box<dyn StateImpl>> {
         log::trace!("received message : {:?}", msg);
         return Some(Box::new(SetupParameters::new()));
         
@@ -140,7 +142,7 @@ impl SetupParameters {
     pub fn new () -> SetupParameters{        
         let parameters = Rc::new(RefCell::new(Vec::with_capacity(10)));
         
-        parameters.borrow_mut().push(Parameter::new(common::PROTOCOL_ADP_G3, message::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL.into(), 0, [0x0].to_vec()));
+        parameters.borrow_mut().push(Parameter::new(common::PROTOCOL_ADP_G3, adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL.into(), 0, [0x0].to_vec()));
 
         let mut v = vec![0x31, 0x30, 0x36, 0x33, 0x4C, 0x50, 0x54, 0x41];
         v.reverse();
@@ -148,17 +150,17 @@ impl SetupParameters {
         // parameters.borrow_mut().push(Parameter::new (common::PROTOCOL_MAC_G3, message::EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_EXTENDED_ADDRESS.into(), 
         //             0, v));
 
-        parameters.borrow_mut().push(Parameter::new (common::PROTOCOL_MAC_G3, message::EMacWrpPibAttribute::MAC_WRP_PIB_SHORT_ADDRESS.into(), 0, vec![0x0, 0x0]));
+        parameters.borrow_mut().push(Parameter::new (common::PROTOCOL_MAC_G3, adp::EMacWrpPibAttribute::MAC_WRP_PIB_SHORT_ADDRESS.into(), 0, vec![0x0, 0x0]));
         
         let mut v = vec![0x02,0x00,0x01,0x50,0xFE,0x80,0x00,0x00,0x00,0x00,0x00,0x00,0x78,0x1D];
         v.reverse();
-        parameters.borrow_mut().push(Parameter::new(common::PROTOCOL_ADP_G3,message::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE.into(), 0, v));
+        parameters.borrow_mut().push(Parameter::new(common::PROTOCOL_ADP_G3,adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE.into(), 0, v));
         let mut v = vec![0x02,0x00,0x01,0x30,0x11,0x22,0x33,0x44,0x55,0x66];
         v.reverse();
-        parameters.borrow_mut().push(Parameter::new(common::PROTOCOL_ADP_G3, message::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE.into(), 1, v));
-        parameters.borrow_mut().push(Parameter::new(common::PROTOCOL_ADP_G3, message::EAdpPibAttribute::ADP_IB_ROUTING_TABLE_ENTRY_TTL.into(), 0, vec![0x00, 0xB4] ));
-        parameters.borrow_mut().push(Parameter::new(common::PROTOCOL_ADP_G3, message::EAdpPibAttribute::ADP_IB_MAX_JOIN_WAIT_TIME.into(), 0, vec![0x00, 0x5A]));
-        parameters.borrow_mut().push(Parameter::new(common::PROTOCOL_ADP_G3, message::EAdpPibAttribute::ADP_IB_MAX_HOPS.into(), 0, vec![0x0A] ));
+        parameters.borrow_mut().push(Parameter::new(common::PROTOCOL_ADP_G3, adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE.into(), 1, v));
+        parameters.borrow_mut().push(Parameter::new(common::PROTOCOL_ADP_G3, adp::EAdpPibAttribute::ADP_IB_ROUTING_TABLE_ENTRY_TTL.into(), 0, vec![0x00, 0xB4] ));
+        parameters.borrow_mut().push(Parameter::new(common::PROTOCOL_ADP_G3, adp::EAdpPibAttribute::ADP_IB_MAX_JOIN_WAIT_TIME.into(), 0, vec![0x00, 0x5A]));
+        parameters.borrow_mut().push(Parameter::new(common::PROTOCOL_ADP_G3, adp::EAdpPibAttribute::ADP_IB_MAX_HOPS.into(), 0, vec![0x0A] ));
         // let mut val = vec![0xAB,0x10,0x34,0x11,0x45,0x11,0x1B,0xC3,0xC1,0x2D,0xE8,0xFF,0x11,0x14,0x22,0x04];
         // val.reverse();
         // parameters.borrow_mut().push(Parameter::new(common::PROTOCOL_ADP_G3, message::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY.into(), 0, val));
@@ -170,7 +172,7 @@ impl SetupParameters {
     fn send_parameter (&self, app: &App, p: Parameter) {
         match p.protocol {
             common::PROTOCOL_ADP_G3 => {
-                if let Ok(attribute) = message::EAdpPibAttribute::try_from_primitive(p.id) {
+                if let Ok(attribute) = adp::EAdpPibAttribute::try_from_primitive(p.id) {
                     if let Ok(c) = request::AdpSetRequest::new (attribute, p.idx, p.value).try_into(){
                         app.cmd_tx.send(usi::Message::UsiOut(c));
                     }    
@@ -178,7 +180,7 @@ impl SetupParameters {
         
             },
             common::PROTOCOL_MAC_G3 => {
-                if let Ok(attribute) = message::EMacWrpPibAttribute::try_from_primitive(p.id) {
+                if let Ok(attribute) = adp::EMacWrpPibAttribute::try_from_primitive(p.id) {
                     if let Ok(c) = request::AdpMacSetRequest::new (attribute, p.idx, p.value).try_into(){
                         app.cmd_tx.send(usi::Message::UsiOut(c));
                     }    
@@ -201,7 +203,7 @@ impl StateImpl for SetupParameters {
         }
     }
 
-    fn on_msg (&self, app: &App, msg:&message::Message) -> Option<Box<dyn StateImpl>> {        
+    fn on_msg (&self, app: &App, msg:&adp::Message) -> Option<Box<dyn StateImpl>> {        
         log::trace!("received message : {:?}", msg);
         if let Some(p) = self.parameters.borrow_mut().pop() {
             self.send_parameter(app, p);
@@ -232,7 +234,7 @@ impl StateImpl for Idle {
         }   
     }
 
-    fn on_msg (&self, app: &App, msg:&message::Message) -> Option<Box<dyn StateImpl>> {
+    fn on_msg (&self, app: &App, msg:&adp::Message) -> Option<Box<dyn StateImpl>> {
         log::trace!("received message : {:?}", msg);
         return Some(Box::new(GetVersion{}));
     }
@@ -253,14 +255,14 @@ impl StateImpl for SetSecurityLevel {
     }
 
     fn on_enter(&self, app: &App) {
-        let c = request::AdpSetRequest::new (message::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY, 0, vec![0;16]);
+        let c = request::AdpSetRequest::new (adp::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY, 0, vec![0;16]);
         if let Ok(c) = c.try_into() {
             app.cmd_tx.send (usi::Message::UsiOut(c));
         }  
         
     }
 
-    fn on_msg (&self, app: &App, msg:&message::Message) -> Option<Box<dyn StateImpl>> {
+    fn on_msg (&self, app: &App, msg:&adp::Message) -> Option<Box<dyn StateImpl>> {
         log::trace!("state {}, msg {:?}", self.get_name(), msg);
         return Some(Box::new(GetEUI64{}));
     }
@@ -277,14 +279,14 @@ impl StateImpl for GetVersion {
     }
 
     fn on_enter(&self, app: &App) {
-        let get_version = request::AdpGetRequest::new (message::EAdpPibAttribute::ADP_IB_SOFT_VERSION, 0);
+        let get_version = request::AdpGetRequest::new (adp::EAdpPibAttribute::ADP_IB_SOFT_VERSION, 0);
         if let Ok(c) = get_version.try_into() {
             app.cmd_tx.send (usi::Message::UsiOut(c));
         }  
         
     }
 
-    fn on_msg (&self, app: &App, msg:&message::Message) -> Option<Box<dyn StateImpl>> {
+    fn on_msg (&self, app: &App, msg:&adp::Message) -> Option<Box<dyn StateImpl>> {
         log::trace!("state {}, msg {:?}", self.get_name(), msg);
         return Some(Box::new(SetSecurityLevel{}));
     }
@@ -305,41 +307,41 @@ impl StateImpl for GetEUI64 {
 
         
 
-        let get_eui64 = request::AdpMacGetRequest::new (message::EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_EXTENDED_ADDRESS, 0);
+        let get_eui64 = request::AdpMacGetRequest::new (adp::EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_EXTENDED_ADDRESS, 0);
         if let Ok(c) = get_eui64.try_into() {
             app.cmd_tx.send (usi::Message::UsiOut(c));
         }  
-        if let Ok(c) = request::AdpMacGetRequest::new(message::EMacWrpPibAttribute::MAC_WRP_PIB_SHORT_ADDRESS, 0).try_into() {
+        if let Ok(c) = request::AdpMacGetRequest::new(adp::EMacWrpPibAttribute::MAC_WRP_PIB_SHORT_ADDRESS, 0).try_into() {
             app.cmd_tx.send(usi::Message::UsiOut(c));
         }
-        if let Ok(c) = request::AdpMacGetRequest::new(message::EMacWrpPibAttribute::MAC_WRP_PIB_SHORT_ADDRESS, 0).try_into() {
+        if let Ok(c) = request::AdpMacGetRequest::new(adp::EMacWrpPibAttribute::MAC_WRP_PIB_SHORT_ADDRESS, 0).try_into() {
             app.cmd_tx.send(usi::Message::UsiOut(c));
         }
-        if let Ok(c) = request::AdpGetRequest::new (message::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 0).try_into(){
+        if let Ok(c) = request::AdpGetRequest::new (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 0).try_into(){
             app.cmd_tx.send(usi::Message::UsiOut(c));
         }
-        if let Ok(c) = request::AdpGetRequest::new (message::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 1).try_into(){
+        if let Ok(c) = request::AdpGetRequest::new (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 1).try_into(){
             app.cmd_tx.send(usi::Message::UsiOut(c));
         }
-        if let Ok(c) = request::AdpGetRequest::new (message::EAdpPibAttribute::ADP_IB_ROUTING_TABLE_ENTRY_TTL, 0).try_into(){
+        if let Ok(c) = request::AdpGetRequest::new (adp::EAdpPibAttribute::ADP_IB_ROUTING_TABLE_ENTRY_TTL, 0).try_into(){
             app.cmd_tx.send(usi::Message::UsiOut(c));
         }
-        if let Ok(c) = request::AdpGetRequest::new (message::EAdpPibAttribute::ADP_IB_MAX_JOIN_WAIT_TIME, 0).try_into(){
+        if let Ok(c) = request::AdpGetRequest::new (adp::EAdpPibAttribute::ADP_IB_MAX_JOIN_WAIT_TIME, 0).try_into(){
             app.cmd_tx.send(usi::Message::UsiOut(c));
         }
-        if let Ok(c) = request::AdpGetRequest::new (message::EAdpPibAttribute::ADP_IB_MAX_HOPS, 0).try_into(){
+        if let Ok(c) = request::AdpGetRequest::new (adp::EAdpPibAttribute::ADP_IB_MAX_HOPS, 0).try_into(){
             app.cmd_tx.send(usi::Message::UsiOut(c));
         }
-        if let Ok(c) = request::AdpGetRequest::new (message::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY, 0).try_into(){
+        if let Ok(c) = request::AdpGetRequest::new (adp::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY, 0).try_into(){
             app.cmd_tx.send(usi::Message::UsiOut(c));
         }
-        if let Ok(c) = request::AdpGetRequest::new (message::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL, 0).try_into(){
+        if let Ok(c) = request::AdpGetRequest::new (adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL, 0).try_into(){
             app.cmd_tx.send(usi::Message::UsiOut(c));
         }
         
     }
 
-    fn on_msg (&self, app: &App, msg:&message::Message) -> Option<Box<dyn StateImpl>> {
+    fn on_msg (&self, app: &App, msg:&adp::Message) -> Option<Box<dyn StateImpl>> {
         log::trace!("state {}, msg {:?}", self.get_name(), msg);
         return Some(Box::new(GetEUI64{}))
     }
@@ -363,7 +365,7 @@ impl StateImpl for NetworkStart {
         }  
     }
 
-    fn on_msg (&self, app: &App, msg:&message::Message) -> Option<Box<dyn StateImpl>> {
+    fn on_msg (&self, app: &App, msg:&adp::Message) -> Option<Box<dyn StateImpl>> {
         log::trace!("state {}, msg {:?}", self.get_name(), msg);
         Some(Box::new(GetEUI64{}))
     }
@@ -374,7 +376,7 @@ impl StateImpl for NetworkStart {
 }
 
 struct GetAttributes {
-    extended_address: Option<message::TAdpExtendedAddress>
+    extended_address: Option<adp::TAddress>
 }
 
 impl StateImpl for GetAttributes {
@@ -383,21 +385,21 @@ impl StateImpl for GetAttributes {
     }
 
     fn on_enter(&self, app: &App) {
-        let get_eui64 = request::AdpMacGetRequest::new (message::EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_EXTENDED_ADDRESS, 0);
+        let get_eui64 = request::AdpMacGetRequest::new (adp::EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_EXTENDED_ADDRESS, 0);
         if let Ok(c) = get_eui64.try_into() {
             app.cmd_tx.send (usi::Message::UsiOut(c));
         }  
     }
 
-    fn on_msg (&self, app: &App, msg:&message::Message) -> Option<Box<dyn StateImpl>> {
+    fn on_msg (&self, app: &App, msg:&adp::Message) -> Option<Box<dyn StateImpl>> {
         log::trace!("state {}, msg {:?}", self.get_name(), msg);
         match msg {
-            message::Message::AdpG3(adp_msg)=> {
+            adp::Message::AdpG3(adp_msg)=> {
                 match adp_msg {
-                    message::AdpG3::GetResponse(get_response) => {
+                    adp::AdpG3::GetResponse(get_response) => {
                         
                     },
-                    message::AdpG3::GetMacResponse(get_mac_response) => {
+                    adp::AdpG3::GetMacResponse(get_mac_response) => {
 
                     }
                     _ => {}

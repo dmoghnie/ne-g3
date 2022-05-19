@@ -113,34 +113,6 @@ pub const G3_SERIAL_MSG_MAC_SNIFFER_INDICATION: u8 =
 pub const ADP_ADDRESS_16BITS: i32 = 2;
 pub const ADP_ADDRESS_64BITS: i32 = 8;
 
-// /// The LBD requests joining a PAN and provides the necessary authentication material.
-// #define LBP_JOINING 0x01
-
-// /// Authentication succeeded with delivery of device specific information (DSI) to the LBD
-// #define LBP_ACCEPTED 0x09
-
-// /// Authentication in progress. PAN specific information (PSI) may be delivered to the LBD
-// #define LBP_CHALLENGE 0x0A
-
-// /// Authentication failed
-// #define LBP_DECLINE 0x0B
-
-// /// KICK frame is used by any device to inform the coordinator that it left the PAN.
-// #define LBP_KICK_FROM_LBD 0x04
-
-// /// KICK frame is used by a PAN coordinator to force a device to lose its MAC address
-// #define LBP_KICK_TO_LBD 0x0C
-
-#[derive(Debug, Eq, PartialEq, TryFromPrimitive, IntoPrimitive)]
-#[repr(u8)]
-pub enum LbpMessageType {
-    LBP_JOINING = 0x01,
-    LBP_ACCEPTED = 0x09,
-    LBP_CHALLENGE = 0x0A,
-    LBP_DECLINE = 0x0B,
-    LBP_KICK_FROM_LBD = 0x04,
-    LBP_KICK_TO_LBD = 0x0C
-}
 
 pub enum EAdpMac_Modulation {
     MOD_ROBO = 0,
@@ -155,21 +127,43 @@ pub enum EAdpMac_Modulation {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct TAdpExtendedAddress {
-    m_au8Value: [u8; 8],
-}
+pub struct TExtendedAddress (pub [u8; 8]);
 
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub union TAddress {
-    m_u16ShortAddr: u16,
-    m_ExtendedAddress: TAdpExtendedAddress,
-}
+// #[repr(C)]
+// #[derive(Copy, Clone)]
+// pub union TAddress {
+//     short_addr: u16,
+//     extended_addr: TAdpExtendedAddress,
+// }
 
-#[derive(Copy, Clone)]
-pub struct TAdpAddress {
-    mu8AddrSize: u8,
-    address: TAddress,
+// #[derive(Copy, Clone)]
+// pub struct TAdpAddress {
+//     mu8AddrSize: u8,
+//     address: TAddress,
+// }
+// impl TAddress {
+//     pub fn new()
+// }
+
+#[derive(Debug, Copy, Clone)]
+pub enum TAddress {
+    Short(u16),
+    Extended(TExtendedAddress)
+}
+impl Into<Vec<u8>> for TAddress {
+    fn into(self) -> Vec<u8> {
+        let mut v = Vec::new();
+
+        match self {
+            Self::Short(a) => {
+                v.append(&mut a.to_be_bytes().to_vec());
+            },
+            Self::Extended(e) => {
+                v.append(&mut e.0.to_vec());
+            }
+        }
+        return v
+    }
 }
 #[derive(Debug, Eq, PartialEq, TryFromPrimitive, IntoPrimitive)]
 #[repr(u8)]
@@ -522,23 +516,6 @@ pub enum EAdpStatus {
     G3_NO_BUFFERS = 0xB4,
     /// Error internal
     G3_ERROR_INTERNAL = 0xFF,
-}
-impl fmt::Debug for TAddress {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("TAddress")
-            .field("short", unsafe { &self.m_u16ShortAddr })
-            .field("extended", unsafe { &self.m_ExtendedAddress })
-            .finish()
-    }
-}
-
-impl fmt::Debug for TAdpAddress {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("TAdpAddress")
-            .field("size", &self.mu8AddrSize)
-            .field("address", &self.address)
-            .finish()
-    }
 }
 
 struct TAdpRouteNotFoundIndication {

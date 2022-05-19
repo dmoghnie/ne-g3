@@ -1,18 +1,14 @@
-use bytes::{BufMut, BytesMut};
 use log::{trace, warn};
-use std::{
-    borrow::BorrowMut,
+use std::{ 
     collections::VecDeque,
-    io::{Read, Write},
-    ops::Index,
-    thread::{self, JoinHandle}, time::{Duration, SystemTime},
+    io::{Read, Write},    
+    time::{Duration, SystemTime},
 };
 
 use crate::common::{self, PROTOCOL_PRIME_API};
 use crate::crc;
 use crate::usi;
 
-use crate::message;
 // use crossbeam_channel::{bounded, Sender};
 
 //use std::sync::mpsc::{Sender, channel};
