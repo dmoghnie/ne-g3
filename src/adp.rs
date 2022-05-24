@@ -1,8 +1,8 @@
 use crate::usi;
 use num_enum::IntoPrimitive;
 use num_enum::TryFromPrimitive;
-use usi::InMessage;
 use std::fmt;
+use usi::InMessage;
 
 pub const G3_SERIAL_MSG_STATUS: u8 = 0;
 
@@ -110,9 +110,8 @@ pub const G3_SERIAL_MSG_MAC_COMM_STATUS_INDICATION: u8 =
 pub const G3_SERIAL_MSG_MAC_SNIFFER_INDICATION: u8 =
     (G3_SERIAL_MSG_MAC_CONF_IND_MESSAGES_BEGIN + 9);
 
-pub const ADP_ADDRESS_16BITS: i32 = 2;
-pub const ADP_ADDRESS_64BITS: i32 = 8;
-
+pub const ADP_ADDRESS_16BITS: usize = 2;
+pub const ADP_ADDRESS_64BITS: usize = 8usize;
 
 pub enum EAdpMac_Modulation {
     MOD_ROBO = 0,
@@ -127,7 +126,27 @@ pub enum EAdpMac_Modulation {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct TExtendedAddress (pub [u8; 8]);
+pub struct TExtendedAddress(pub [u8; ADP_ADDRESS_64BITS]);
+
+impl TryFrom<&[u8]> for TExtendedAddress {
+    type Error = ();
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        if value.len() != ADP_ADDRESS_64BITS {
+            Err(())
+        } else {
+            let mut r = [0; ADP_ADDRESS_64BITS];
+            for i in  0..ADP_ADDRESS_64BITS {
+                r[i]=value[i];
+            }
+            return Ok(TExtendedAddress(r));
+        }
+    }
+}
+impl Into<TAddress> for TExtendedAddress {
+    fn into(self) -> TAddress{
+        return TAddress::Extended(self);
+    }
+}
 
 // #[repr(C)]
 // #[derive(Copy, Clone)]
@@ -148,7 +167,7 @@ pub struct TExtendedAddress (pub [u8; 8]);
 #[derive(Debug, Copy, Clone)]
 pub enum TAddress {
     Short(u16),
-    Extended(TExtendedAddress)
+    Extended(TExtendedAddress),
 }
 impl Into<Vec<u8>> for TAddress {
     fn into(self) -> Vec<u8> {
@@ -157,14 +176,15 @@ impl Into<Vec<u8>> for TAddress {
         match self {
             Self::Short(a) => {
                 v.append(&mut a.to_be_bytes().to_vec());
-            },
+            }
             Self::Extended(e) => {
                 v.append(&mut e.0.to_vec());
             }
         }
-        return v
+        return v;
     }
 }
+
 #[derive(Debug, Eq, PartialEq, TryFromPrimitive, IntoPrimitive)]
 #[repr(u8)]
 pub enum TAdpBand {
@@ -174,6 +194,15 @@ pub enum TAdpBand {
     ADP_BAND_ARIB = 3,
 }
 
+#[derive(Debug)]
+pub struct TAdpNetworkStatusIndication {
+	pub pan_id: u16,
+	pub src_addr: TAddress,
+    pub dst_addr: TAddress,
+    pub status: EAdpStatus,
+    pub security_level: u8,
+    pub key_idx:u8
+}
 /**********************************************************************************************************************/
 /** PAN descriptor structure specification
  *
@@ -227,7 +256,7 @@ pub struct TPathDescriptor {
     m_aForwardPath: [THopDescriptor; 16],
     m_aReversePath: [THopDescriptor; 16],
 }
-#[derive(Debug, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Hash)]
+#[derive(Debug, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Hash, Copy, Clone)]
 #[repr(u32)]
 pub enum EAdpPibAttribute {
     ADP_IB_SECURITY_LEVEL = 0x00000000,
@@ -298,9 +327,9 @@ pub enum EAdpPibAttribute {
     ADP_IB_MANUF_UPDATE_NON_VOLATILE_DATA = 0x080000DA,
     ADP_IB_MANUF_DISCOVER_ROUTE_GLOBAL_SEQ_NUM = 0x080000DB,
 
-    INVALID = 0xFFFFFFFF
+    INVALID = 0xFFFFFFFF,
 }
-#[derive(Debug, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Hash)]
+#[derive(Debug, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Hash, Copy, Clone)]
 #[repr(u32)]
 pub enum EMacWrpPibAttribute {
     MAC_WRP_PIB_ACK_WAIT_DURATION = 0x00000040,
@@ -427,52 +456,86 @@ pub enum EMacWrpPibAttribute {
 pub fn usi_message_to_message(msg: &InMessage) -> Option<Message> {
     {
         if let Some(cmd) = msg.buf.get(0) {
-            match *cmd {
+            match *cmd & 0x3F {
                 G3_SERIAL_MSG_ADP_DATA_CONFIRM => {
-                    if let Some(data_response) = DataResponse::try_from_message(&msg) {
-                        return Some(Message::AdpG3(AdpG3::DataResponse(data_response)));
+                    if let Some(data_response) = AdpG3DataResponse::try_from_message(&msg) {
+                        return Some(Message::AdpG3DataResponse(data_response));
                     }
-                },
+                }
                 G3_SERIAL_MSG_ADP_SET_CONFIRM => {
-                    if let Some(set_response) = SetResponse::try_from_message(&msg) {
-                        return Some(Message::AdpG3(AdpG3::SetResponse(set_response)));
+                    if let Some(set_response) = AdpG3SetResponse::try_from_message(&msg) {
+                        return Some(Message::AdpG3SetResponse(set_response));
                     }
-                },
+                }
                 G3_SERIAL_MSG_ADP_MAC_SET_CONFIRM => {
-                    if let Some(set_response) = SetMacResponse::try_from_message(&msg) {
-                        return Some(Message::AdpG3(AdpG3::SetMacResponse(set_response)));
+                    if let Some(set_response) = AdpG3SetMacResponse::try_from_message(&msg) {
+                        return Some(Message::AdpG3SetMacResponse(set_response));
                     }
-                },
+                }
                 G3_SERIAL_MSG_STATUS => {
-                    if let Some(msg_response) = MsgStatusResponse::try_from_message(&msg) {
-                        return Some(Message::AdpG3(AdpG3::MsgStatusResponse(msg_response)));
+                    if let Some(msg_response) = AdpG3MsgStatusResponse::try_from_message(&msg) {
+                        return Some(Message::AdpG3MsgStatusResponse(msg_response));
                     }
-                },
+                }
                 G3_SERIAL_MSG_ADP_DISCOVERY_INDICATION => {
-                    if let Some(discovery_event) = DiscoveryEvent::try_from_message(&msg) {
-                        return Some(Message::AdpG3(AdpG3::DiscoveryEvent(discovery_event)));
+                    if let Some(discovery_event) = AdpG3DiscoveryEvent::try_from_message(&msg) {
+                        return Some(Message::AdpG3DiscoveryEvent(discovery_event));
                     }
-                },
+                }
                 G3_SERIAL_MSG_ADP_DISCOVERY_CONFIRM => {
-                    if let Some(discovery_response) = DiscoveryResponse::try_from_message(&msg) {
-                        return Some(Message::AdpG3(AdpG3::DiscoveryResponse(discovery_response)));
+                    if let Some(discovery_response) = AdpG3DiscoveryResponse::try_from_message(&msg)
+                    {
+                        return Some(Message::AdpG3DiscoveryResponse(discovery_response));
                     }
-                },
+                }
                 G3_SERIAL_MSG_ADP_GET_CONFIRM => {
-                    if let Some(get_response) = GetResponse::try_from_message(&msg) {
-                        return Some(Message::AdpG3(AdpG3::GetResponse(get_response)));
+                    if let Some(get_response) = AdpG3GetResponse::try_from_message(&msg) {
+                        return Some(Message::AdpG3GetResponse(get_response));
                     }
-                },
+                }
                 G3_SERIAL_MSG_ADP_MAC_GET_CONFIRM => {
-                    if let Some(mac_get_response) = GetMacResponse::try_from_message(&msg) {
-                        return Some(Message::AdpG3(AdpG3::GetMacResponse(mac_get_response)));
+                    if let Some(mac_get_response) = AdpG3GetMacResponse::try_from_message(&msg) {
+                        return Some(Message::AdpG3GetMacResponse(mac_get_response));
                     }
-
-                },
-                G3_SERIAL_MSG_ADP_NETWORK_START_CONFIRM=> {
-                    if let Some(network_start_response) = NetworkStartResponse::try_from_message(&msg){
-                        return Some(Message::AdpG3(AdpG3::NetworkStartResponse(network_start_response)));
+                }
+                G3_SERIAL_MSG_ADP_NETWORK_START_CONFIRM => {
+                    if let Some(network_start_response) =
+                        AdpG3NetworkStartResponse::try_from_message(&msg)
+                    {
+                        return Some(Message::AdpG3NetworkStartResponse(network_start_response));
                     }
+                }
+                G3_SERIAL_MSG_ADP_NETWORK_JOIN_CONFIRM => {
+                    if let Some(network_join_response) =
+                        AdpG3NetworkJoinResponse::try_from_message(&msg)
+                    {
+                        return Some(Message::AdpG3NetworkJoinResponse(network_join_response));
+                    }
+                }
+                G3_SERIAL_MSG_ADP_LBP_INDICATION => {
+                    if let Some(lbp_indication) = AdpG3LbpEvent::try_from_message(&msg) {
+                        return Some(Message::AdpG3LbpEvent(lbp_indication));
+                    }
+                    else{
+                        log::warn!("Failed to parse lbp indication")
+                    }
+                }
+                G3_SERIAL_MSG_ADP_LBP_CONFIRM => {
+                    if let Some(lbp_response) = AdpG3LbpReponse::try_from_message(&msg) {
+                        return Some(Message::AdpG3LbpReponse(lbp_response));
+                    }
+                }
+                G3_SERIAL_MSG_ADP_NETWORK_STATUS_INDICATION => {
+                    if let Some(network_status_indication) = AdpG3NetworkStatusEvent::try_from_message(&msg){
+                        return Some(Message::AdpG3NetworkStatusEvent(network_status_indication));
+                    }
+                    else{
+                        log::warn!("Failed to parse network status indication");
+                    }
+                }
+                G3_SERIAL_MSG_MAC_DATA_INDICATION => {
+                    // let let Some(data_event) = AdpG3DataEvent::try_from_message
+                    log::warn!("Data indication ")
                 }
                 _ => return None,
             }
@@ -516,6 +579,11 @@ pub enum EAdpStatus {
     G3_NO_BUFFERS = 0xB4,
     /// Error internal
     G3_ERROR_INTERNAL = 0xFF,
+    
+    //We are receiving those codes without mapping
+    G3_UNKOWN = 0x80,
+    G3_UNKOWN_2 = 0xF3
+
 }
 
 struct TAdpRouteNotFoundIndication {
@@ -546,7 +614,29 @@ pub enum Message {
     //     ATPL250,
     // SnifG3,
     // MacG3,
-    AdpG3(AdpG3),
+    AdpG3MsgStatusResponse(AdpG3MsgStatusResponse),
+    AdpG3DataResponse(AdpG3DataResponse),
+    AdpG3DataEvent(AdpG3DataEvent),
+    AdpG3NetworkStatusEvent(AdpG3NetworkStatusEvent),
+    AdpG3DiscoveryResponse(AdpG3DiscoveryResponse),
+    AdpG3NetworkStartResponse(AdpG3NetworkStartResponse),
+    AdpG3NetworkJoinResponse(AdpG3NetworkJoinResponse),
+    AdpG3NetworkLeaveResponse(AdpG3NetworkLeaveResponse),
+    AdpG3NetworkLeaveEvent(AdpG3NetworkLeaveEvent),
+    AdpG3ResetResponse(AdpG3ResetResponse),
+    AdpG3SetResponse(AdpG3SetResponse),
+    AdpG3GetResponse(AdpG3GetResponse),
+    AdpG3LbpReponse(AdpG3LbpReponse),
+    AdpG3LbpEvent(AdpG3LbpEvent),
+    AdpG3RouteDiscoveryResponse(AdpG3RouteDiscoveryResponse),
+    AdpG3PathDiscoveryResponse(AdpG3PathDiscoveryResponse),
+    AdpG3SetMacResponse(AdpG3SetMacResponse),
+    AdpG3GetMacResponse(AdpG3GetMacResponse),
+    AdpG3BufferEvent(AdpG3BufferEvent),
+    AdpG3DiscoveryEvent(AdpG3DiscoveryEvent),
+    AdpG3PreqEvent(AdpG3PreqEvent),
+    AdpG3UpdNonVolatileDataEvent(AdpG3UpdNonVolatileDataEvent),
+    AdpG3RouteNotFoundEvent(AdpG3RouteNotFoundEvent),
     // CoordG3,
     // PrimeApi,
     // UserDefined,
@@ -555,45 +645,21 @@ pub enum Message {
 }
 
 #[derive(Debug)]
-pub enum AdpG3 {
-    MsgStatusResponse(MsgStatusResponse),
-    DataResponse(DataResponse),
-    DataEvent(DataEvent),
-    NetworkStatusEvent(NetworkStatusEvent),
-    DiscoveryResponse(DiscoveryResponse),
-    NetworkStartResponse(NetworkStartResponse),
-    NetworkJoinResponse(NetworkJoinResponse),
-    NetworkLeaveResponse(NetworkLeaveResponse),
-    NetworkLeaveEvent(NetworkLeaveEvent),
-    ResetResponse(ResetResponse),
-    SetResponse(SetResponse),
-    GetResponse(GetResponse),
-    LbpReponse(LbpReponse),
-    LbpEvent(LbpEvent),
-    RouteDiscoveryResponse(RouteDiscoveryResponse),
-    PathDiscoveryResponse(PathDiscoveryResponse),
-    SetMacResponse(SetMacResponse),
-    GetMacResponse(GetMacResponse),
-    BufferEvent(BufferEvent),
-    DiscoveryEvent(DiscoveryEvent),
-    PreqEvent(PreqEvent),
-    UpdNonVolatileDataEvent(UpdNonVolatileDataEvent),
-    RouteNotFoundEvent(RouteNotFoundEvent),
-}
+pub enum AdpG3 {}
 #[derive(Debug)]
-pub struct MsgStatusResponse {
+pub struct AdpG3MsgStatusResponse {
     status: EAdpStatus,
     cmd: u8,
 }
 
-impl MsgStatusResponse {
-    pub fn try_from_message(msg: &usi::InMessage) -> Option<MsgStatusResponse> {
+impl AdpG3MsgStatusResponse {
+    pub fn try_from_message(msg: &usi::InMessage) -> Option<AdpG3MsgStatusResponse> {
         if msg.buf.len() > 0 {
             //cmd is the first byte???
             //Add one byte for cmd
             if let Ok(status) = EAdpStatus::try_from(msg.buf[0]) {
                 if let Some(&cmd) = msg.buf.get(1) {
-                    return Some(MsgStatusResponse { status, cmd });
+                    return Some(AdpG3MsgStatusResponse { status, cmd });
                 }
             }
         }
@@ -601,7 +667,7 @@ impl MsgStatusResponse {
     }
 }
 
-pub struct GetResponse {
+pub struct AdpG3GetResponse {
     pub status: EAdpStatus,
     pub attribute_id: u32,
     pub attribute_idx: u16,
@@ -610,37 +676,42 @@ pub struct GetResponse {
 }
 
 const MIN_GET_RESPONSE_LEN: usize = 8;
-impl GetResponse {
-    pub fn try_from_message(msg: &usi::InMessage) -> Option<GetResponse> {
+impl AdpG3GetResponse {
+    pub fn try_from_message(msg: &usi::InMessage) -> Option<AdpG3GetResponse> {
         if msg.buf.len() >= MIN_GET_RESPONSE_LEN + 1 {
             //Add one byte for cmd
             if let Ok(status) = EAdpStatus::try_from(msg.buf[1]) {
-                
-                let mut attribute_id:u32 = msg.buf[2] as u32;
+                let mut attribute_id: u32 = msg.buf[2] as u32;
                 attribute_id = (attribute_id << 8) + msg.buf[3] as u32;
                 attribute_id = (attribute_id << 8) + msg.buf[4] as u32;
                 attribute_id = (attribute_id << 8) + msg.buf[5] as u32;
-                
+
                 let mut attribute_idx = msg.buf[6] as u16;
                 attribute_idx = (attribute_idx << 8) + msg.buf[7] as u16;
                 // let mut attribute_id;
                 // if let Some(attribute_id_buf) = msg.buf.get(2..5) {
                 //     attribute_id = u32::from_be_bytes(*attribute_id_buf);
                 // }
-                
+
                 // let mut attribute_idx;
                 // if let Some(attribute_idx_buf) = msg.buf.get(5..7) {
                 //     attribute_idx = u16::from_be_bytes(attribute_idx_buf);
                 // }
                 let attribute_len = msg.buf[8];
-                let mut result = GetResponse {
-                    status, attribute_id, attribute_idx, attribute_len, attribute_val: Vec::new()
+                let mut result = AdpG3GetResponse {
+                    status,
+                    attribute_id,
+                    attribute_idx,
+                    attribute_len,
+                    attribute_val: Vec::new(),
                 };
 
-                if (attribute_len > 0 && msg.buf.len() >= (MIN_GET_RESPONSE_LEN + 1 + attribute_len as usize)) {
-                    if let Some(content) = msg.buf.get(9..){
+                if (attribute_len > 0
+                    && msg.buf.len() >= (MIN_GET_RESPONSE_LEN + 1 + attribute_len as usize))
+                {
+                    if let Some(content) = msg.buf.get(9..) {
                         result.attribute_val.append(&mut content.to_vec());
-                    }                                        
+                    }
                 }
                 return Some(result);
             }
@@ -649,11 +720,15 @@ impl GetResponse {
     }
 }
 
-impl fmt::Debug for GetResponse {
+impl fmt::Debug for AdpG3GetResponse {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("GetResponse")
             .field("status", &self.status)
-            .field("attribute id", &EAdpPibAttribute::try_from_primitive(self.attribute_id).unwrap_or(EAdpPibAttribute::INVALID))
+            .field(
+                "attribute id",
+                &EAdpPibAttribute::try_from_primitive(self.attribute_id)
+                    .unwrap_or(EAdpPibAttribute::INVALID),
+            )
             .field("attribute index", &self.attribute_idx)
             .field("attribute value", &self.attribute_val)
             .finish()
@@ -661,7 +736,7 @@ impl fmt::Debug for GetResponse {
 }
 
 #[derive(Debug)]
-pub struct GetMacResponse {
+pub struct AdpG3GetMacResponse {
     pub status: EAdpStatus,
     pub attribute_id: u32,
     pub attribute_idx: u16,
@@ -670,37 +745,42 @@ pub struct GetMacResponse {
 }
 
 const MIN_GET_MAC_RESPONSE_LEN: usize = 8;
-impl GetMacResponse {
-    pub fn try_from_message(msg: &usi::InMessage) -> Option<GetMacResponse> {
+impl AdpG3GetMacResponse {
+    pub fn try_from_message(msg: &usi::InMessage) -> Option<AdpG3GetMacResponse> {
         if msg.buf.len() >= MIN_GET_RESPONSE_LEN + 1 {
             //Add one byte for cmd
             if let Ok(status) = EAdpStatus::try_from(msg.buf[1]) {
-                
-                let mut attribute_id:u32 = msg.buf[2] as u32;
+                let mut attribute_id: u32 = msg.buf[2] as u32;
                 attribute_id = (attribute_id << 8) + msg.buf[3] as u32;
                 attribute_id = (attribute_id << 8) + msg.buf[4] as u32;
                 attribute_id = (attribute_id << 8) + msg.buf[5] as u32;
-                
+
                 let mut attribute_idx = msg.buf[6] as u16;
                 attribute_idx = (attribute_idx << 8) + msg.buf[7] as u16;
                 // let mut attribute_id;
                 // if let Some(attribute_id_buf) = msg.buf.get(2..5) {
                 //     attribute_id = u32::from_be_bytes(*attribute_id_buf);
                 // }
-                
+
                 // let mut attribute_idx;
                 // if let Some(attribute_idx_buf) = msg.buf.get(5..7) {
                 //     attribute_idx = u16::from_be_bytes(attribute_idx_buf);
                 // }
                 let attribute_len = msg.buf[8];
-                let mut result = GetMacResponse {
-                    status, attribute_id, attribute_idx, attribute_len, attribute_val: Vec::new()
+                let mut result = AdpG3GetMacResponse {
+                    status,
+                    attribute_id,
+                    attribute_idx,
+                    attribute_len,
+                    attribute_val: Vec::new(),
                 };
 
-                if (attribute_len > 0 && msg.buf.len() >= (MIN_GET_RESPONSE_LEN + 1 + attribute_len as usize)) {
-                    if let Some(content) = msg.buf.get(9..){
+                if (attribute_len > 0
+                    && msg.buf.len() >= (MIN_GET_RESPONSE_LEN + 1 + attribute_len as usize))
+                {
+                    if let Some(content) = msg.buf.get(9..) {
                         result.attribute_val.append(&mut content.to_vec());
-                    }                                        
+                    }
                 }
                 return Some(result);
             }
@@ -710,36 +790,87 @@ impl GetMacResponse {
 }
 
 #[derive(Debug)]
-pub struct LbpReponse {}
+pub struct AdpG3LbpReponse {
+    pub status: EAdpStatus,
+    pub handle: u8
+}
+const LBP_RESPONSE_MIN:usize = 2usize;
+
+impl AdpG3LbpReponse {
+    pub fn try_from_message(msg: &usi::InMessage) -> Option<AdpG3LbpReponse> {
+        if msg.buf.len() == LBP_RESPONSE_MIN + 1 {
+            //Add one byte for cmd
+            if let Ok(status) = EAdpStatus::try_from(msg.buf[1]) {
+                let handle = msg.buf[2];
+                return Some(AdpG3LbpReponse {
+                    status,
+                    handle
+                });
+            }
+        }
+        None
+    }
+}
+#[derive(Debug)]
+pub struct AdpG3LbpEvent {
+    pub src_addr: u16,
+    pub nsdu: Vec<u8>,
+    pub link_quality_indicator: u8,
+    pub security_enabled: bool,
+}
+const LBP_EVENT_MIN: usize = 4;
+
+impl AdpG3LbpEvent {
+    pub fn try_from_message(msg: &usi::InMessage) -> Option<AdpG3LbpEvent> {
+        if msg.buf.len() >= LBP_EVENT_MIN + 1 {
+            let src_addr = (msg.buf[1] as u16) << 8 | (msg.buf[2] as u16);
+            let nsdu_len = ((msg.buf[3] as u16) << 8 | (msg.buf[4] as u16)) as usize;
+            let mut nsdu = Vec::with_capacity(nsdu_len);
+            let mut pos = 5usize;
+            if let Some(d) = msg.buf.get(pos..(pos + nsdu_len) as usize) {
+                nsdu = d.to_vec();
+                pos = pos + nsdu_len;
+            }
+            if let (Some(link_quality_indicator), Some(security_enabled)) =
+                (msg.buf.get(pos), msg.buf.get(pos + 1usize))
+            {
+                return Some(AdpG3LbpEvent {
+                    src_addr,
+                    nsdu,
+                    link_quality_indicator: *link_quality_indicator,
+                    security_enabled: *security_enabled != 0,
+                });
+            }
+        }
+        None
+    }
+}
 
 #[derive(Debug)]
-pub struct LbpEvent {}
+pub struct AdpG3RouteDiscoveryResponse {}
 
 #[derive(Debug)]
-pub struct RouteDiscoveryResponse {}
+pub struct AdpG3PathDiscoveryResponse {}
 
 #[derive(Debug)]
-pub struct PathDiscoveryResponse {}
-
-#[derive(Debug)]
-pub struct BufferEvent {}
+pub struct AdpG3BufferEvent {}
 
 const DISCOVERY_EVENT_LEN: usize = 7;
 
 #[derive(Debug)]
-pub struct DiscoveryEvent {
+pub struct AdpG3DiscoveryEvent {
     pub pan_descriptor: TAdpPanDescriptor,
 }
 
-impl DiscoveryEvent {
-    pub fn try_from_message(msg: &usi::InMessage) -> Option<DiscoveryEvent> {
+impl AdpG3DiscoveryEvent {
+    pub fn try_from_message(msg: &usi::InMessage) -> Option<AdpG3DiscoveryEvent> {
         if msg.buf.len() == DISCOVERY_EVENT_LEN + 1 {
             //Add one byte for cmd
             let pan_id = (msg.buf[1] as u16) << 8 | (msg.buf[2] as u16);
             let link_quality = msg.buf[3];
             let lba_address = (msg.buf[4] as u16) << 8 | (msg.buf[5] as u16);
             let rc_coord = (msg.buf[6] as u16) << 8 | (msg.buf[7] as u16);
-            return Some(DiscoveryEvent {
+            return Some(AdpG3DiscoveryEvent {
                 pan_descriptor: TAdpPanDescriptor {
                     pan_id,
                     link_quality,
@@ -753,38 +884,63 @@ impl DiscoveryEvent {
 }
 
 #[derive(Debug)]
-pub struct PreqEvent {}
+pub struct AdpG3PreqEvent {}
 
 #[derive(Debug)]
-pub struct UpdNonVolatileDataEvent {}
+pub struct AdpG3UpdNonVolatileDataEvent {}
 
 #[derive(Debug)]
-pub struct RouteNotFoundEvent {}
+pub struct AdpG3RouteNotFoundEvent {}
 
 #[derive(Debug)]
-pub struct NetworkJoinResponse {}
+pub struct AdpG3NetworkJoinResponse {
+    pub status: EAdpStatus,
+    pub network_addr: u16,
+    pub pan_id: u16,
+}
+
+
+const JOIN_RESPONSE_MIN_LEN: usize = 5usize;
+
+impl AdpG3NetworkJoinResponse {
+    pub fn try_from_message(msg: &usi::InMessage) -> Option<AdpG3NetworkJoinResponse> {
+        if msg.buf.len() == JOIN_RESPONSE_MIN_LEN + 1 {
+            //Add one byte for cmd
+            if let Ok(status) = EAdpStatus::try_from(msg.buf[1]) {
+                let network_addr = (msg.buf[2] as u16) << 8 | (msg.buf[3] as u16);
+                let pan_id = (msg.buf[4] as u16) << 8 | (msg.buf[5] as u16);
+                return Some(AdpG3NetworkJoinResponse {
+                    status,
+                    network_addr,
+                    pan_id,
+                });
+            }
+        }
+        None
+    }
+}
 
 #[derive(Debug)]
-pub struct NetworkLeaveEvent {}
+pub struct AdpG3NetworkLeaveEvent {}
 
 #[derive(Debug)]
-pub struct NetworkLeaveResponse {}
+pub struct AdpG3NetworkLeaveResponse {}
 
 #[derive(Debug)]
-pub struct ResetResponse {}
+pub struct AdpG3ResetResponse {}
 
 #[derive(Debug)]
-pub struct SetMacResponse {
+pub struct AdpG3SetMacResponse {
     status: EAdpStatus,
     attribute_id: u32,
     attribute_idx: u16,
 }
-impl SetMacResponse {
-    pub fn try_from_message(msg: &usi::InMessage) -> Option<SetMacResponse> {
+impl AdpG3SetMacResponse {
+    pub fn try_from_message(msg: &usi::InMessage) -> Option<AdpG3SetMacResponse> {
         if msg.buf.len() == SET_RESPONSE_LEN + 1 {
             //Add one byte for cmd
             if let Ok(status) = EAdpStatus::try_from(msg.buf[1]) {
-                return Some(SetMacResponse {
+                return Some(AdpG3SetMacResponse {
                     status,
                     attribute_id: (msg.buf[2] as u32) << 24
                         | (msg.buf[3] as u32) << 16
@@ -799,18 +955,18 @@ impl SetMacResponse {
 }
 
 const SET_RESPONSE_LEN: usize = 7;
-pub struct SetResponse {
+pub struct AdpG3SetResponse {
     status: EAdpStatus,
     attribute_id: u32,
     attribute_idx: u16,
 }
 
-impl SetResponse {
-    pub fn try_from_message(msg: &usi::InMessage) -> Option<SetResponse> {
+impl AdpG3SetResponse {
+    pub fn try_from_message(msg: &usi::InMessage) -> Option<AdpG3SetResponse> {
         if msg.buf.len() == SET_RESPONSE_LEN + 1 {
             //Add one byte for cmd
             if let Ok(status) = EAdpStatus::try_from(msg.buf[1]) {
-                return Some(SetResponse {
+                return Some(AdpG3SetResponse {
                     status,
                     attribute_id: (msg.buf[2] as u32) << 24
                         | (msg.buf[3] as u32) << 16
@@ -823,26 +979,30 @@ impl SetResponse {
         None
     }
 }
-impl fmt::Debug for SetResponse {
+impl fmt::Debug for AdpG3SetResponse {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SetResponse")
             .field("status", &self.status)
-            .field("attribute id", &EAdpPibAttribute::try_from_primitive(self.attribute_id).unwrap_or(EAdpPibAttribute::INVALID))
+            .field(
+                "attribute id",
+                &EAdpPibAttribute::try_from_primitive(self.attribute_id)
+                    .unwrap_or(EAdpPibAttribute::INVALID),
+            )
             .field("attribute index", &self.attribute_idx)
             .finish()
     }
 }
 
 #[derive(Debug)]
-pub struct NetworkStartResponse {
-    status: EAdpStatus,
+pub struct AdpG3NetworkStartResponse {
+    pub status: EAdpStatus,
 }
-impl NetworkStartResponse {
-    pub fn try_from_message(msg: &usi::InMessage) -> Option<NetworkStartResponse> {
+impl AdpG3NetworkStartResponse {
+    pub fn try_from_message(msg: &usi::InMessage) -> Option<AdpG3NetworkStartResponse> {
         if msg.buf.len() > 1 {
             //Add one byte for cmd
             if let Ok(status) = EAdpStatus::try_from(msg.buf[1]) {
-                return Some(NetworkStartResponse { status });
+                return Some(AdpG3NetworkStartResponse { status });
             }
         }
         None
@@ -850,15 +1010,15 @@ impl NetworkStartResponse {
 }
 
 #[derive(Debug)]
-pub struct DiscoveryResponse {
+pub struct AdpG3DiscoveryResponse {
     status: EAdpStatus,
 }
-impl DiscoveryResponse {
-    pub fn try_from_message(msg: &usi::InMessage) -> Option<DiscoveryResponse> {
+impl AdpG3DiscoveryResponse {
+    pub fn try_from_message(msg: &usi::InMessage) -> Option<AdpG3DiscoveryResponse> {
         if msg.buf.len() > 1 {
             //Add one byte for cmd
             if let Ok(status) = EAdpStatus::try_from(msg.buf[1]) {
-                return Some(DiscoveryResponse { status });
+                return Some(AdpG3DiscoveryResponse { status });
             }
         }
         None
@@ -866,16 +1026,125 @@ impl DiscoveryResponse {
 }
 
 #[derive(Debug)]
-pub struct NetworkStatusEvent {}
-pub struct DataResponse {
+pub struct AdpG3NetworkStatusEvent {
+    status_indication: TAdpNetworkStatusIndication
+}
+// {
+//     struct TAdpNetworkStatusIndication adpNetworkStatusIndication;
+//       adpNetworkStatusIndication.m_u16PanId = (*ptrMsg++);
+//       adpNetworkStatusIndication.m_u16PanId = (*ptrMsg++) + (adpNetworkStatusIndication.m_u16PanId << 8);
+//       adpNetworkStatusIndication.m_SrcDeviceAddress.m_u8AddrSize = (*ptrMsg++);
+//   if(adpNetworkStatusIndication.m_SrcDeviceAddress.m_u8AddrSize == ADP_ADDRESS_16BITS)
+//   {
+//       memcpy(&adpNetworkStatusIndication.m_SrcDeviceAddress.m_u16ShortAddr, ptrMsg, ADP_ADDRESS_16BITS);
+//       *ptrMsg += ADP_ADDRESS_16BITS;
+//   } else if(adpNetworkStatusIndication.m_SrcDeviceAddress.m_u8AddrSize == ADP_ADDRESS_64BITS){
+//       memcpy(&adpNetworkStatusIndication.m_SrcDeviceAddress.m_ExtendedAddress, ptrMsg, ADP_ADDRESS_16BITS);
+//       *ptrMsg += ADP_ADDRESS_16BITS;
+//   } else {
+//         LOG_IFACE_G3_ADP("ERROR: wrong src address size.\r\n");
+//       return false;
+//   }
+//       adpNetworkStatusIndication.m_DstDeviceAddress.m_u8AddrSize = (*ptrMsg++);
+//   if(adpNetworkStatusIndication.m_DstDeviceAddress.m_u8AddrSize == ADP_ADDRESS_16BITS)
+//   {
+//       memcpy(&adpNetworkStatusIndication.m_DstDeviceAddress.m_u16ShortAddr, ptrMsg, ADP_ADDRESS_16BITS);
+//       *ptrMsg += ADP_ADDRESS_16BITS;
+//   } else if(adpNetworkStatusIndication.m_DstDeviceAddress.m_u8AddrSize == ADP_ADDRESS_64BITS){
+//       memcpy(&adpNetworkStatusIndication.m_DstDeviceAddress.m_ExtendedAddress, ptrMsg, ADP_ADDRESS_16BITS);
+//       *ptrMsg += ADP_ADDRESS_16BITS;
+//   } else {
+//         LOG_IFACE_G3_ADP("ERROR: wrong dst address size.\r\n");
+//       return false;
+//   }
+//   adpNetworkStatusIndication.m_u8Status = (*ptrMsg++);
+//   adpNetworkStatusIndication.m_u8SecurityLevel = (*ptrMsg++);
+//   adpNetworkStatusIndication.m_u8KeyIndex = (*ptrMsg++);
+//   // Trigger the callback
+//   g_adpNotifications.fnctAdpNetworkStatusIndication(&adpNetworkStatusIndication);
+// }
+impl AdpG3NetworkStatusEvent {
+    pub fn try_from_message(msg: &usi::InMessage) -> Option<AdpG3NetworkStatusEvent> {
+        let mut pan_id:Option<u16> = None;
+
+        if let (Some(b1), Some(b2)) = (msg.buf.get(1), msg.buf.get(2)) {
+            pan_id = Some((*b2 as u16) + ((*b1 as u16) << 8));
+        }
+        let mut addr_size:usize = 0;
+        let mut idx = 3;
+        if let Some(v) = msg.buf.get(idx) {
+            addr_size = *v as usize;
+            idx = idx + 1;
+        }
+        let mut src_addr:Option<TAddress> = None;
+        if addr_size == ADP_ADDRESS_16BITS {
+            if let Some(v) = msg.buf.get(idx..(idx+ADP_ADDRESS_16BITS)){                
+                src_addr = Some(TAddress::Short((v[0] as u16) + ((v[1] as u16) << 8)));
+                idx = idx + ADP_ADDRESS_16BITS;
+            }
+        }
+        else if addr_size == ADP_ADDRESS_64BITS {
+            if let Some(v) = msg.buf.get(idx..(idx+ADP_ADDRESS_64BITS)) {
+                src_addr = Some(TAddress::Extended(TExtendedAddress::try_from(v).unwrap()));
+                idx = idx + ADP_ADDRESS_64BITS;
+            }
+        }
+        else {
+            log::warn!("Network status event, invalid src addr size {}", addr_size);
+            return None;
+        }
+
+        if let Some(v) = msg.buf.get(idx) {
+            addr_size = *v as usize;
+            idx = idx + 1;
+        }
+        let mut dst_addr:Option<TAddress> = None;
+        if addr_size == ADP_ADDRESS_16BITS {
+            if let Some(v) = msg.buf.get(idx..(idx+ADP_ADDRESS_16BITS)){
+                dst_addr = Some(TAddress::Short((v[0] as u16) + ((v[1] as u16) << 8)));
+                idx = idx + ADP_ADDRESS_16BITS;
+            }
+        }
+        else if addr_size == ADP_ADDRESS_64BITS {
+            if let Some(v) = msg.buf.get(idx..(idx+ADP_ADDRESS_64BITS)) {
+                dst_addr = Some(TAddress::Extended(TExtendedAddress::try_from(v).unwrap()));
+                idx = idx + ADP_ADDRESS_64BITS;
+            }
+        }
+        else {
+            log::warn!("Network status event, invalid dst addr size {}", addr_size);
+            return None;
+        }
+        if let (Some(b1), Some(b2), Some(b3)) = (msg.buf.get(idx), msg.buf.get(idx+1), msg.buf.get(idx+2)){
+            if let Ok(status) = EAdpStatus::try_from_primitive (*b1) {
+                let status_indication = TAdpNetworkStatusIndication {
+                    pan_id: pan_id.unwrap(),
+                    src_addr: src_addr.unwrap(),
+                    dst_addr: dst_addr.unwrap(),
+                    status,
+                    security_level: *b2,
+                    key_idx: *b3
+                };
+                return Some(AdpG3NetworkStatusEvent {
+                    status_indication: status_indication
+                })
+            }
+        }
+        else{
+            log::warn!("Network status: cannot get status, security_level, key_index");
+        }
+        None
+    }
+}
+pub struct AdpG3DataResponse {
     status: EAdpStatus,
     nsdu_handle: u8,
 }
-impl DataResponse {
-    pub fn try_from_message(msg: &usi::InMessage) -> Option<DataResponse> {
+impl AdpG3DataResponse {
+    pub fn try_from_message(msg: &usi::InMessage) -> Option<AdpG3DataResponse> {
         if let (Some(&status8), Some(&nsdu_handle)) = (msg.buf.get(1), msg.buf.get(2)) {
             if let Ok(status) = EAdpStatus::try_from(status8) {
-                return Some(DataResponse {
+                return Some(AdpG3DataResponse {
                     status,
                     nsdu_handle,
                 });
@@ -884,7 +1153,7 @@ impl DataResponse {
         None
     }
 }
-impl fmt::Debug for DataResponse {
+impl fmt::Debug for AdpG3DataResponse {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("DataResponse")
             .field("status", &self.status)
@@ -894,7 +1163,7 @@ impl fmt::Debug for DataResponse {
 }
 
 #[derive(Debug)]
-pub struct DataEvent {
+pub struct AdpG3DataEvent {
     nsdu: Vec<u8>,
     link_quality_indicator: u8,
 }

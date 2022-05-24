@@ -104,3 +104,25 @@ pub fn to_hex_string(bytes: &Vec<u8>) -> String {
     let strs: Vec<String> = bytes.iter().map(|b| format!("{:02X}", b)).collect();
     strs.join(" ")
 }
+pub fn array_to_hex_string(bytes: Vec<u8>) -> String {
+    let strs: Vec<String> = bytes.iter().map(|b| format!("{:02X}", b)).collect();
+    strs.join(" ")
+}
+
+#[derive(Clone)]
+pub struct Parameter {
+    pub protocol: u8,
+    pub id: u32,
+    pub idx: u16,
+    pub value: Vec<u8>,
+}
+impl Parameter {
+    pub fn new(protocol: u8, id: u32, idx: u16, value: Vec<u8>) -> Self {
+        Parameter {
+            protocol,
+            id,
+            idx,
+            value,
+        }
+    }
+}

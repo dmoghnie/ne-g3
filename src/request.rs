@@ -1,9 +1,12 @@
+use std::borrow::Borrow;
+use std::borrow::BorrowMut;
+
 use crate::adp::TAddress;
 use crate::common;
 use crate::adp;
 use crate::usi;
 use crate::usi::OutMessage;
-
+use num_enum;
 #[derive(Debug)]
 pub struct AdpInitializeRequest {    
     band: u8
@@ -19,11 +22,10 @@ impl AdpInitializeRequest {
     }
 }
 
-impl TryInto<usi::OutMessage> for AdpInitializeRequest {
-    type Error = ();
-    fn try_into(self) -> Result<usi::OutMessage, Self::Error> {
+impl Into<usi::OutMessage> for AdpInitializeRequest {    
+    fn into(self) -> usi::OutMessage{
         let v = [adp::G3_SERIAL_MSG_ADP_INITIALIZE, self.band];        
-        Ok(OutMessage::new(common::PROTOCOL_ADP_G3, &v.to_vec()))
+        OutMessage::new(common::PROTOCOL_ADP_G3, &v.to_vec())
     }
 }
 
@@ -37,15 +39,14 @@ impl AdpDiscoveryRequest {
         AdpDiscoveryRequest { duration}
     }
 }
-impl TryInto<usi::OutMessage> for AdpDiscoveryRequest {
-    type Error=();
+impl Into<usi::OutMessage> for AdpDiscoveryRequest {
     // fn to_command (&self) -> usi::cmd::Command {
     //     let v = vec![common::G3_SERIAL_MSG_ADP_DISCOVERY_REQUEST, self.duration];
     //     usi::cmd::Command::new(usi::common::PROTOCOL_ADP_G3, &v)
     // }
-    fn try_into(self) -> Result<usi::OutMessage, Self::Error> {
+    fn into(self) -> usi::OutMessage {
         let v = [adp::G3_SERIAL_MSG_ADP_DISCOVERY_REQUEST, self.duration];
-        Ok(OutMessage::new(common::PROTOCOL_ADP_G3, &v.to_vec()))
+        OutMessage::new(common::PROTOCOL_ADP_G3, &v.to_vec())
     }
 
 }
@@ -53,7 +54,8 @@ impl TryInto<usi::OutMessage> for AdpDiscoveryRequest {
 // void AdpLbpRequest(const struct TAdpAddress *pDstAddr, uint16_t u16NsduLength,
 //     uint8_t *pNsdu, uint8_t u8NsduHandle, uint8_t u8MaxHops,
 //     bool bDiscoveryRoute, uint8_t u8QualityOfService, bool bSecurityEnable){
-pub struct AdpLbpRequest {    
+#[derive(Debug)]
+    pub struct AdpLbpRequest {    
     dst_addr: adp::TAddress,    
     data: Vec<u8>,
     handle: u8,
@@ -69,19 +71,26 @@ impl AdpLbpRequest {
     }
 }
 
-impl TryInto<usi::OutMessage> for AdpLbpRequest {
-    type Error=();
-   
-    fn try_into(mut self) -> Result<usi::OutMessage, Self::Error> {
+impl Into<usi::OutMessage> for AdpLbpRequest {
 
-        let mut address_v:Vec<u8> = self.dst_addr.into();
+    fn into(mut self) -> usi::OutMessage {
+
+        let mut address_v:Vec<u8> = self.dst_addr.into();        
         let mut  v = vec![adp::G3_SERIAL_MSG_ADP_LBP_REQUEST, self.handle,  self.max_hops, self.discover_route as u8,
             self.quality_of_service, self.security_enable as u8];
-        v.append(&mut address_v.len().to_be_bytes().to_vec());
-        v.append(&mut self.data.len().to_be_bytes().to_vec());
+            
+        // let address_len = address_v.len() as u16;
+        // v.push((address_len >> 8) as u8);
+        v.push((address_v.len() as u8));
+        // v.append(&mut address_len.to_be_bytes().to_vec());
+        let data_len = self.data.len() as u16;
+        // v.push((data_len >> 8) as u8);
+        // v.push((data_len as u8));
+        
+        v.append(&mut data_len.to_be_bytes().to_vec());
         v.append(&mut address_v);
         v.append(&mut self.data);
-        Ok(OutMessage::new(common::PROTOCOL_ADP_G3, &v.to_vec()))
+        OutMessage::new(common::PROTOCOL_ADP_G3, &v.to_vec())
     }
 
 }
@@ -95,12 +104,11 @@ impl AdpNetworkStartRequest {
         AdpNetworkStartRequest { pan_id}
     }
 }
-impl TryInto<usi::OutMessage> for AdpNetworkStartRequest {
-    type Error=();
-    
-    fn try_into(self) -> Result<usi::OutMessage, Self::Error> {
-        let v = [adp::G3_SERIAL_MSG_ADP_NETWORK_START_REQUEST, (self.pan_id >> 8) as u8, (self.pan_id & 0xFF) as u8];
-        Ok(OutMessage::new(common::PROTOCOL_ADP_G3, &v.to_vec()))
+impl Into<usi::OutMessage> for AdpNetworkStartRequest {
+    fn into(self) -> usi::OutMessage {
+        let pan_id_v = self.pan_id.to_be_bytes();
+        let v = [adp::G3_SERIAL_MSG_ADP_NETWORK_START_REQUEST, pan_id_v[0], pan_id_v[1]];
+        OutMessage::new(common::PROTOCOL_ADP_G3, &v.to_vec())
     }
 
 }
@@ -117,39 +125,46 @@ impl  AdpGetRequest  {
     }
 }
 
-impl TryInto<usi::OutMessage> for AdpGetRequest{
-    type Error = ();
-    fn try_into(self) -> Result<usi::OutMessage, Self::Error> {
+impl Into<usi::OutMessage> for AdpGetRequest{
+    fn into(self) -> usi::OutMessage {
         let attribute: u32 = self.attribute_id.into();
-        let v = [adp::G3_SERIAL_MSG_ADP_GET_REQUEST, 
-            ((attribute >> 24) & 0xFF) as u8,
-            ((attribute >> 16) & 0xFF) as u8,
-            ((attribute >> 8) & 0xFF) as u8,
-            ((attribute) & 0xFF) as u8,
-            (self.attribute_idx >> 8) as u8,
-            (self.attribute_idx & 0xFF) as u8];
-        Ok(OutMessage::new(common::PROTOCOL_ADP_G3, &v.to_vec()))
+        let attribute_v = attribute.to_be_bytes();
+        // let v = [adp::G3_SERIAL_MSG_ADP_GET_REQUEST, 
+        //     ((attribute >> 24) & 0xFF) as u8,
+        //     ((attribute >> 16) & 0xFF) as u8,
+        //     ((attribute >> 8) & 0xFF) as u8,
+        //     ((attribute) & 0xFF) as u8,
+        //     (self.attribute_idx >> 8) as u8,
+        //     (self.attribute_idx & 0xFF) as u8];
+        let mut v = vec![adp::G3_SERIAL_MSG_ADP_GET_REQUEST];
+        for ch in attribute_v {
+            v.push(ch);
+        }
+        for ch in self.attribute_idx.to_be_bytes() {
+            v.push (ch);
+        }
+        OutMessage::new(common::PROTOCOL_ADP_G3, &v.to_vec())
     }
 
 
 }
 
-pub struct AdpSetRequest {
+pub struct AdpSetRequest<'a> {
     attribute_id: adp::EAdpPibAttribute, 
     attribute_idx: u16,
-    attribute_value: Vec<u8>
+    attribute_value: &'a Vec<u8>
 }
-impl  AdpSetRequest  {
-    pub fn new(attribute_id: adp::EAdpPibAttribute, attribute_idx: u16, attribute_value:Vec<u8>) -> AdpSetRequest {
+impl <'a> AdpSetRequest <'a> {
+    pub fn new(attribute_id: adp::EAdpPibAttribute, attribute_idx: u16, attribute_value:&'a Vec<u8>) -> AdpSetRequest<'a> {
         AdpSetRequest{
             attribute_id, attribute_idx, attribute_value
         }
     }
 }
 
-impl TryInto<usi::OutMessage> for AdpSetRequest{
-    type Error = ();
-    fn try_into(self) -> Result<usi::OutMessage, Self::Error> {
+impl Into<usi::OutMessage> for AdpSetRequest<'_>{
+    
+    fn into(self) -> usi::OutMessage {
         let attribute: u32 = self.attribute_id.into();
         let mut v = vec!(adp::G3_SERIAL_MSG_ADP_SET_REQUEST, 
             ((attribute >> 24) & 0xFF) as u8,
@@ -158,10 +173,22 @@ impl TryInto<usi::OutMessage> for AdpSetRequest{
             ((attribute) & 0xFF) as u8,
             (self.attribute_idx >> 8) as u8,
             (self.attribute_idx & 0xFF) as u8, (self.attribute_value.len() as u8));
-        for ch in self.attribute_value {
-            v.push(ch);
-        }
-        Ok(OutMessage::new(common::PROTOCOL_ADP_G3, &v.to_vec()))
+        // for ch in self.attribute_value {
+        //     v.push(ch);
+        // }
+        v.append(self.attribute_value.clone().borrow_mut());
+        // let mut v = vec![adp::G3_SERIAL_MSG_ADP_SET_REQUEST];
+        // for ch in attribute.to_le_bytes() {
+        //     v.push(ch);
+        // }
+        // for ch in self.attribute_idx.to_le_bytes() {
+        //     v.push(ch);
+        // }
+        // for ch in self.attribute_value {
+        //     v.push(*ch);
+        // }
+
+        OutMessage::new(common::PROTOCOL_ADP_G3, &v.to_vec())
     }
 }
 
@@ -177,9 +204,9 @@ impl  AdpMacGetRequest  {
     }
 }
 
-impl TryInto<usi::OutMessage> for AdpMacGetRequest{
-    type Error = ();
-    fn try_into(self) -> Result<usi::OutMessage, Self::Error> {
+impl Into<usi::OutMessage> for AdpMacGetRequest{
+    
+    fn into(self) -> usi::OutMessage {
         let attribute: u32 = self.attribute_id.into();
         let v = [adp::G3_SERIAL_MSG_ADP_MAC_GET_REQUEST, 
             ((attribute >> 24) & 0xFF) as u8,
@@ -188,26 +215,26 @@ impl TryInto<usi::OutMessage> for AdpMacGetRequest{
             ((attribute) & 0xFF) as u8,
             (self.attribute_idx >> 8) as u8,
             (self.attribute_idx & 0xFF) as u8];
-        Ok(OutMessage::new(common::PROTOCOL_ADP_G3, &v.to_vec()))
+        OutMessage::new(common::PROTOCOL_ADP_G3, &v.to_vec())
     }
 }
 
-pub struct AdpMacSetRequest {
+pub struct AdpMacSetRequest<'a> {
     attribute_id: adp::EMacWrpPibAttribute, 
     attribute_idx: u16,
-    attribute_value: Vec<u8>
+    attribute_value: &'a Vec<u8>
 }
-impl  AdpMacSetRequest  {
-    pub fn new(attribute_id: adp::EMacWrpPibAttribute, attribute_idx: u16, attribute_value:Vec<u8>) -> AdpMacSetRequest {
+impl  <'a>AdpMacSetRequest<'a>  {
+    pub fn new(attribute_id: adp::EMacWrpPibAttribute, attribute_idx: u16, attribute_value:&'a Vec<u8>) -> AdpMacSetRequest<'a> {
         AdpMacSetRequest{
             attribute_id, attribute_idx, attribute_value
         }
     }
 }
 
-impl TryInto<usi::OutMessage> for AdpMacSetRequest{
-    type Error = ();
-    fn try_into(self) -> Result<usi::OutMessage, Self::Error> {
+impl Into<usi::OutMessage> for AdpMacSetRequest<'_>{
+    
+    fn into(self) -> usi::OutMessage {
         let attribute: u32 = self.attribute_id.into();
         let mut v = vec!(adp::G3_SERIAL_MSG_ADP_MAC_SET_REQUEST, 
             ((attribute >> 24) & 0xFF) as u8,
@@ -216,10 +243,11 @@ impl TryInto<usi::OutMessage> for AdpMacSetRequest{
             ((attribute) & 0xFF) as u8,
             (self.attribute_idx >> 8) as u8,
             (self.attribute_idx & 0xFF) as u8, self.attribute_value.len() as u8);
-        for ch in self.attribute_value {
-            v.push(ch);
-        }
-        Ok(OutMessage::new(common::PROTOCOL_ADP_G3, &v.to_vec()))
+        // for ch in self.attribute_value {
+        //     v.push(ch);
+        // }
+        v.append(self.attribute_value.clone().borrow_mut());
+        OutMessage::new(common::PROTOCOL_ADP_G3, &v.to_vec())
     }
 }
 
@@ -236,9 +264,9 @@ impl AdpDataRequest {
     }
 }
 
-impl TryInto<usi::OutMessage> for AdpDataRequest {
-    type Error = ();
-    fn try_into(self) -> Result<usi::OutMessage, Self::Error> {
+impl Into<usi::OutMessage> for AdpDataRequest {
+    
+    fn into(self) -> usi::OutMessage {
         let mut v = vec![adp::G3_SERIAL_MSG_ADP_DATA_REQUEST, self.handle, 
             self.discover_route as u8, self.quality_of_service,
             (self.data.len() >> 8) as u8,
@@ -246,6 +274,28 @@ impl TryInto<usi::OutMessage> for AdpDataRequest {
        for ch in self.data {
            v.push(ch);
        }
-        Ok(OutMessage::new(common::PROTOCOL_ADP_G3, &v))
+        OutMessage::new(common::PROTOCOL_ADP_G3, &v)
+    }
+}
+
+pub struct AdpJoinNetworkRequest {
+    pub pan_id: u16,
+    pub lba_address: u16
+}
+
+impl Into<usi::OutMessage> for AdpJoinNetworkRequest {
+
+    fn into(self) -> usi::OutMessage {
+        // let v = [adp::G3_SERIAL_MSG_ADP_NETWORK_JOIN_REQUEST, (self.pan_id >> 8) as u8, (self.pan_id & 0xFF) as u8,
+        //     (self.lba_address >> 8) as u8, (self.lba_address & 0xFF) as u8];        
+
+        let mut v = vec![adp::G3_SERIAL_MSG_ADP_NETWORK_JOIN_REQUEST];
+        for ch in self.pan_id.to_be_bytes() {
+            v.push(ch);
+        }
+        for ch in self.lba_address.to_be_bytes() {
+            v.push(ch);
+        }
+        OutMessage::new(common::PROTOCOL_ADP_G3, &v.to_vec())
     }
 }

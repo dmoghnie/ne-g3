@@ -5,7 +5,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use crate::common::{self, PROTOCOL_PRIME_API};
+use crate::common::{self, PROTOCOL_PRIME_API, to_hex_string, array_to_hex_string};
 use crate::crc;
 use crate::usi;
 
@@ -22,6 +22,10 @@ pub enum Message {
     UsiOut(OutMessage),
     HeartBeat(SystemTime),
     SystemStartup
+}
+
+pub trait MessageHandler {
+    fn process(&mut self, msg: usi::Message) -> bool;
 }
 
 #[derive(Clone, Debug)]
@@ -346,7 +350,7 @@ impl<'a, T: Read + Write + Send> Port<'a, T> where 'a: 'static, T:'static {
                 if t == 0 {
                     return;
                 } else {
-                    trace!("usi received {} bytes", t);
+                    trace!("usi received {} ", array_to_hex_string(b[..t].to_vec()));
                 }
                 for ch in &mut b[..t] {
                     //TODO, push whole slice
