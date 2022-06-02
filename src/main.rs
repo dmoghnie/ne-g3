@@ -1,3 +1,4 @@
+mod config;
 mod adp;
 mod app;
 mod common;
@@ -7,6 +8,8 @@ mod lbp;
 mod modem;
 mod request;
 mod usi;
+mod lbp_functions;
+mod lbp_manager;
 
 use std::time::{Duration, SystemTime};
 use std::{env, io, str, thread};

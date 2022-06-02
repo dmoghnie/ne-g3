@@ -125,7 +125,7 @@ pub enum EAdpMac_Modulation {
     MOD_UNKNOWN = 255,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct TExtendedAddress(pub [u8; ADP_ADDRESS_64BITS]);
 
 impl TryFrom<&[u8]> for TExtendedAddress {

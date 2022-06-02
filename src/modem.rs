@@ -4,6 +4,7 @@ use crate::{adp, adp::{Message, EAdpStatus}, common, common::Parameter, request,
 use lazy_static::lazy_static;
 use log;
 use std::collections::HashMap;
+use crate::config;
 
 #[derive(thiserror::Error, Debug)]
 enum ModemError {
@@ -29,26 +30,19 @@ enum State {
     Ready,
     SendingData
 }
-const PAN_ID:u16 = 0x781D;
-const SENDER:[u8;2] = [0x0, 0x1];
-const RECEIVER:[u8;2] = [0x0, 0x2];
 
-const CONF_PSK_KEY:[u8; 16] = [0xab, 0x10, 0x34, 0x11, 0x45, 0x11, 0x1b, 0xc3, 0xc1, 0x2d, 0xe8, 0xff, 0x11, 0x14, 0x22, 0x4];
-const CONF_GMK_KEY:[u8; 16] = [0xaf, 0x4d, 0x6d, 0xcc, 0xf1, 0x4d, 0xe7, 0xc1, 0xc4, 0x23, 0x5e, 0x6f, 0xef, 0x6c, 0x15, 0x1f];
-const CONF_CONTEXT_INFORMATION_TABLE_0:[u8;14] = [0x2, 0x0, 0x1, 0x50, 0xfe, 0x80, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x78, 0x1d];
-const CONF_CONTEXT_INFORMATION_TABLE_1:[u8;10] = [0x2, 0x0, 0x1, 0x30, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66];
 
 lazy_static! {
 
     static ref MAC_STACK_PARAMETERS: Vec<(adp::EMacWrpPibAttribute, u16, Vec<u8>)> = vec![(        
         adp::EMacWrpPibAttribute::MAC_WRP_PIB_SHORT_ADDRESS,
         0,
-        SENDER.to_vec()
+        config::SENDER.to_vec()
     ), (adp::EMacWrpPibAttribute::MAC_WRP_PIB_PAN_ID, 0, vec![0x78, 0x1d])];
     static ref ADP_STACK_PARAMETERS: Vec<(adp::EAdpPibAttribute, u16, Vec<u8>)> = vec![
-        (adp::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY, 0, CONF_PSK_KEY.to_vec()),
-        (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 0, CONF_CONTEXT_INFORMATION_TABLE_0.to_vec()),
-        (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 1, CONF_CONTEXT_INFORMATION_TABLE_1.to_vec()),
+        (adp::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY, 0, config::CONF_PSK_KEY.to_vec()),
+        (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 0, config::CONF_CONTEXT_INFORMATION_TABLE_0.to_vec()),
+        (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 1, config::CONF_CONTEXT_INFORMATION_TABLE_1.to_vec()),
         (
             adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL,
             0,
@@ -72,7 +66,6 @@ lazy_static! {
     ];
 }
 
-const BAND: adp::TAdpBand = adp::TAdpBand::ADP_BAND_CENELEC_A;
 pub struct Modem {
     cmd_tx: flume::Sender<usi::Message>,
     state: State,
@@ -201,7 +194,7 @@ impl Modem {
     }
     fn initializeStack(&mut self) {        
         self.state = State::StackIntializing;
-        let cmd = request::AdpInitializeRequest::from_band(BAND);
+        let cmd = request::AdpInitializeRequest::from_band(config::BAND);
         match self.send_cmd(cmd.into()) {
             Err(e) => {
                 //TODO, retry ?!
@@ -233,7 +226,7 @@ impl Modem {
         // let get_address_request = request::AdpMacGetRequest::new(adp::EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_EXTENDED_ADDRESS, 0);                
         // self.send_cmd(get_address_request.into());
         self.state = State::JoiningNetwork;
-        let cmd = request::AdpJoinNetworkRequest {pan_id: PAN_ID, lba_address: 0};
+        let cmd = request::AdpJoinNetworkRequest {pan_id: config::PAN_ID, lba_address: 0};
         if let Err(e) = self.send_cmd(cmd.into()) {
             log::warn!("Failed to send network start request {}", e);
         }
@@ -241,7 +234,7 @@ impl Modem {
     
     fn sendData(&mut self) {
         self.state = State::SendingData;
-        let receiver = RECEIVER.to_vec();
+        let receiver = config::RECEIVER.to_vec();
         let cmd1 = request::AdpSetRequest::new (adp::EAdpPibAttribute::ADP_IB_DESTINATION_ADDRESS_SET, 0, 
             &receiver);
         self.send_cmd (cmd1.into());

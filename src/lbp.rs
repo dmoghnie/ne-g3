@@ -22,7 +22,7 @@ use crate::adp::TExtendedAddress;
 // /// KICK frame is used by a PAN coordinator to force a device to lose its MAC address
 // #define LBP_KICK_TO_LBD 0x0C
 
-const CONF_PARAM_SHORT_ADDR:u8 = 0x1D;
+
 
 #[derive(Debug, Eq, PartialEq, TryFromPrimitive, IntoPrimitive)]
 #[repr(u8)]
@@ -44,6 +44,7 @@ pub enum LbpMessage {
     KickFromLbd(KickFromLbdMessage),
     KickToLbd(KickToLbdMessage),
 }
+
 #[derive(Debug)]
 pub struct JoiningMessage {
     pub ext_addr: TExtendedAddress,
@@ -57,25 +58,25 @@ pub struct JoiningMessage {
 
 #[derive(Debug)]
 pub struct AcceptedMessage {
-    ext_addr: TExtendedAddress,
+    pub ext_addr: TExtendedAddress,
 
-    bootstrapping_data: Vec<u8>,
+    pub bootstrapping_data: Vec<u8>,
 }
-impl AcceptedMessage {
-    pub fn new(ext_addr: TExtendedAddress, short_addr: u16) -> Self {
-        // let mut v = vec![];
+// impl AcceptedMessage {
+//     pub fn new(ext_addr: TExtendedAddress, short_addr: u16) -> Self {
+//         // let mut v = vec![];
 
-        let mut v = vec![CONF_PARAM_SHORT_ADDR];
-        v.push(0x2);
-        for ch in short_addr.to_be_bytes(){
-            v.push(ch);
-        }
-        // v.push(((short_addr & 0xFF00) >> 8) as u8);
-        // v.push((short_addr & 0x00FF) as u8);
+//         let mut v = vec![CONF_PARAM_SHORT_ADDR];
+//         v.push(0x2);
+//         for ch in short_addr.to_be_bytes(){
+//             v.push(ch);
+//         }
+//         // v.push(((short_addr & 0xFF00) >> 8) as u8);
+//         // v.push((short_addr & 0x00FF) as u8);
         
-        AcceptedMessage { ext_addr: ext_addr, bootstrapping_data: v }
-    }
-}
+//         AcceptedMessage { ext_addr: ext_addr, bootstrapping_data: v }
+//     }
+// }
 /*
 impl Into<Vec<u8>> for AcceptedMessage {
     fn into(mut self) -> Vec<u8> {
@@ -211,12 +212,4 @@ pub fn adp_message_to_lbp_message(msg: &adp::AdpG3LbpEvent) -> Option<LbpMessage
     }
     log::warn!("adp_msg_to_message_lbp for lpb_msg failed ");
     None
-}
-
-pub struct LbpManager {}
-
-impl LbpManager {
-    pub fn process_lbp_event(msg: &adp::AdpG3LbpEvent) {
-
-    }
 }
