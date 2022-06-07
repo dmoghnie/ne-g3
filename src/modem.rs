@@ -46,7 +46,7 @@ lazy_static! {
         (
             adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL,
             0,
-            vec![0x5]
+            vec![0x0]
         ),
         (
             adp::EAdpPibAttribute::ADP_IB_ROUTING_TABLE_ENTRY_TTL,
@@ -56,7 +56,7 @@ lazy_static! {
         (        
             adp::EAdpPibAttribute::ADP_IB_MAX_JOIN_WAIT_TIME,
             0,
-            vec![0x1A, 0x00]
+            vec![0x00, 0x5A]
         ),
         (            
             adp::EAdpPibAttribute::ADP_IB_MAX_HOPS,

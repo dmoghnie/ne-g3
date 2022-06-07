@@ -2,9 +2,12 @@ use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::process::id;
+use std::thread::current;
 use std::time::Instant;
 use std::time::SystemTime;
 
+use crate::adp::AdpG3LbpReponse;
+use crate::adp::EAdpStatus;
 use crate::adp::TAdpBand;
 use crate::adp::TExtendedAddress;
 use crate::config;
@@ -32,6 +35,8 @@ enum DeviceState {
     BS_STATE_SENT_EAP_MSG_DECLINED,
 }
 
+
+
 #[derive(Debug)]
 pub struct DeviceSlot {
     state: DeviceState,
@@ -45,24 +50,34 @@ pub struct DeviceSlot {
     uc_pending_confirms: u8,
     uc_pending_tx_handler: u8,
     m_PskContext: TEapPskContext,
+    data: Vec<u8>
 }
 impl DeviceSlot {
-    pub fn new(ext_addr: TExtendedAddress) -> Self {
+    pub fn new(ext_addr: TExtendedAddress, short_address: u16) -> Self {
         DeviceSlot {
             state: DeviceState::BS_STATE_WAITING_JOINNING,
             m_LbdAddress: ext_addr,
             us_lba_src_addr: 0,
-            us_assigned_short_address: 0,
-            uc_tx_handle: 0,
+            us_assigned_short_address: short_address,
+            uc_tx_handle: 0xff,
             ul_timeout: 0,
             uc_tx_attemps: 0,
             m_randS: TEapPskRand::new(),
             uc_pending_confirms: 0,
             uc_pending_tx_handler: 0,
             m_PskContext: TEapPskContext::new(),
+            data: Vec::new()
         }
     }
 }
+
+struct DeviceManager<'a> {
+    devices: HashMap<TExtendedAddress, DeviceSlot>,
+    short_addresses: HashMap<u16, &'a TExtendedAddress>
+}
+
+
+
 
 pub struct LbpManager {
     u8EAPIdentifier: u8,
@@ -72,7 +87,7 @@ pub struct LbpManager {
     currentKeyIndex: u8,
     uc_nsdu_handle: u8,
     g_IdS: TEapPskNetworkAccessIdentifierS,
-    devices: HashMap<TExtendedAddress, DeviceSlot>,
+    devices: HashMap<TExtendedAddress, DeviceSlot>,    
     start_time: Instant,
     g_u32Nonce: u32,
 }
@@ -84,10 +99,11 @@ impl LbpManager {
         if config::BAND == TAdpBand::ADP_BAND_ARIB {
             idS = TEapPskNetworkAccessIdentifierS(config::X_IDS_ARIB.to_vec());
         }
+        // let idS = TEapPskNetworkAccessIdentifierS(vec![]);
 
         LbpManager {
             u8EAPIdentifier: 0,
-            initialShortAddr: 0,
+            initialShortAddr:0,
             extAddr: [0u8; 8],
             pending: 0,
             currentKeyIndex: 0,
@@ -166,7 +182,7 @@ impl LbpManager {
             }
 
             log::trace!("[BS] Encoding Message3.");
-            let mut pMemoryBuffer: Vec<u8> = Vec::new();
+            
             EAP_PSK_Encode_Message3(
                 &pDevice.m_PskContext,
                 *p_u8EAPIdentifier,
@@ -176,7 +192,7 @@ impl LbpManager {
                 *p_u32Nonce,
                 PCHANNEL_RESULT_DONE_SUCCESS,
                 &pData,
-                &mut pMemoryBuffer,
+                &mut pDevice.data,
             );
 
             *p_u8EAPIdentifier += 1;
@@ -185,7 +201,8 @@ impl LbpManager {
             return Some(
                 lbp::ChallengeMessage {
                     ext_addr: pDevice.m_LbdAddress,
-                    bootstrapping_data: pMemoryBuffer,
+                    bootstrapping_data: pDevice.data.clone(),
+                    // bootstrapping_data: vec![0x1, 0x2, 0x3]
                 }
                 .into(),
             );
@@ -197,73 +214,85 @@ impl LbpManager {
         return None;
     }
 
-    fn Process_Joining_EAP_T3(pDevice: &mut DeviceSlot, pBootstrappingData: &Vec<u8>,
-		pEAPData: &Vec<u8>, p_u8EAPIdentifier: &mut u8) -> Option<Vec<u8>>
-{
-	let mut randS: TEapPskRand = TEapPskRand::new();
-	let mut u8PChannelResult:u8 = 0;
-	let mut u32Nonce:u32 = 0;
-    let mut channelData:Vec<u8> = Vec::new();
-	log::trace!("[BS] Process Joining EAP T3.");
+    fn Process_Joining_EAP_T3(
+        pDevice: &mut DeviceSlot,
+        pBootstrappingData: &Vec<u8>,
+        pEAPData: &Vec<u8>,
+        p_u8EAPIdentifier: &mut u8,
+    ) -> Option<Vec<u8>> {
+        let mut randS: TEapPskRand = TEapPskRand::new();
+        let mut u8PChannelResult: u8 = 0;
+        let mut u32Nonce: u32 = 0;
+        let mut channelData: Vec<u8> = Vec::new();
+        log::trace!("[BS] Process Joining EAP T3.");
 
-	if (EAP_PSK_Decode_Message4(pEAPData, &pDevice.m_PskContext,
-			pBootstrappingData, &mut randS, &mut u32Nonce, &mut u8PChannelResult,
-			&mut channelData)) {
-        let mut memory_buffer: Vec<u8> = Vec::new();
-		EAP_PSK_Encode_EAP_Success(
-				*p_u8EAPIdentifier,
-				&mut memory_buffer
-				);
-        if randS.0 != pDevice.m_randS.0 {
-            log::warn!("[BS] Error: Bad RandS received");
+        if (EAP_PSK_Decode_Message4(
+            pEAPData,
+            &pDevice.m_PskContext,
+            pBootstrappingData,
+            &mut randS,
+            &mut u32Nonce,
+            &mut u8PChannelResult,
+            &mut channelData,
+        )) {
+            
+            EAP_PSK_Encode_EAP_Success(*p_u8EAPIdentifier, &mut pDevice.data);
+            if randS.0 != pDevice.m_randS.0 {
+                log::warn!("[BS] Error: Bad RandS received");
+                return None;
+            }
+
+            *p_u8EAPIdentifier += 1;
+
+            /* Encode now the LBP message */
+
+            return Some(
+                lbp::AcceptedMessage {
+                    ext_addr: pDevice.m_LbdAddress,
+                    bootstrapping_data: pDevice.data.clone(),
+                }
+                .into(),
+            );
+        } else {
+            log::warn!("[BS] ERROR: Process_Joining_EAP_T3.");
             return None;
         }
+    }
 
-		*p_u8EAPIdentifier +=1;
-
-		/* Encode now the LBP message */
-
-                return Some(
-                    lbp::AcceptedMessage {
-                        ext_addr: pDevice.m_LbdAddress,
-                        bootstrapping_data: memory_buffer,
-                    }
-                    .into(),
-                );        
-
-	} else {
-		log::warn!("[BS] ERROR: Process_Joining_EAP_T3.");
-		return None;
-	}
-}
-
+    fn get_next_short_addr (current:&mut u16) -> u16{
+        
+        *current += 1;
+        return *current;
+    }
     fn Process_Joining0(&mut self, msg: &JoiningMessage) -> Option<Vec<u8>> {
         log::trace!("[BS] Process Joining 0.");
         let device = self
             .devices
             .entry(msg.ext_addr)
-            .or_insert(DeviceSlot::new(msg.ext_addr));
+            .or_insert(DeviceSlot::new(msg.ext_addr, LbpManager::get_next_short_addr(&mut self.initialShortAddr)));
 
-        if (msg.bootstrapping_data.len() == 0) {
+        if msg.bootstrapping_data.len() == 0 {
             //First join message
             if (device.state == DeviceState::BS_STATE_WAITING_JOINNING) {
                 EAP_PSK_Initialize(&config::G_EAP_PSK_KEY, &mut device.m_PskContext);
-                device.m_randS = TEapPskRand::new_random();
+                // device.m_randS = TEapPskRand::new_random(); //TODO for testing we need deterministic to compare between the C coordinator and Rust coordinator
+                device.m_randS = config::RAND_S_DEFAULT.to_vec().into();
 
-                let mut out_message: Vec<u8> = Vec::new();
+                
 
                 EAP_PSK_Encode_Message1(
                     self.u8EAPIdentifier,
                     &device.m_randS,
                     &self.g_IdS,
-                    &mut out_message,
+                    &mut device.data,
                 );
+                log::trace!("Process joining message, out_message {:?}", device.data);
                 device.state = DeviceState::BS_STATE_SENT_EAP_MSG_1;
                 self.u8EAPIdentifier += 1;
                 return Some(
                     lbp::ChallengeMessage {
                         ext_addr: msg.ext_addr,
-                        bootstrapping_data: out_message,
+                        bootstrapping_data: device.data.clone(),
                     }
                     .into(),
                 );
@@ -281,33 +310,40 @@ impl LbpManager {
                 &mut pEAPData,
             ) {
                 if pu8Code == EAP_RESPONSE {
-                    if (pu8Identifier == EAP_PSK_T1
+                    if pu8TSubfield == EAP_PSK_T1
                         && (device.state == DeviceState::BS_STATE_WAITING_EAP_MSG_2
-                            || device.state == DeviceState::BS_STATE_SENT_EAP_MSG_1))
+                            || device.state == DeviceState::BS_STATE_SENT_EAP_MSG_1)
                     {
                         if let Some(result) = LbpManager::Process_Joining_EAP_T1(
                             &pEAPData,
                             device,
                             &self.g_IdS,
                             self.currentKeyIndex,
-                            false, &mut self.u8EAPIdentifier, &mut self.g_u32Nonce
-                        ) {
+                            false,
+                            &mut self.u8EAPIdentifier,
+                            &mut self.g_u32Nonce,
+                        ) {                            
+                            device.state = DeviceState::BS_STATE_SENT_EAP_MSG_3;
+                            log::trace!("[BS] Slot updated to BS_STATE_SENT_EAP_MSG_3");
+                            return Some(result);
+                        } else {
                             /* Abort current BS process */
                             log::trace!("[BS] LBP error processing EAP T1.");
                             device.state = DeviceState::BS_STATE_WAITING_JOINNING;
                             device.uc_pending_confirms = 0;
                             log::trace!("[BS] Slot updated to BS_STATE_WAITING_JOINNING");
-                            return Some(result);
-                        } else {
-                            device.state = DeviceState::BS_STATE_SENT_EAP_MSG_3;
-                            log::trace!("[BS] Slot updated to BS_STATE_SENT_EAP_MSG_3");
+                            
                         }
                     } else if pu8TSubfield == EAP_PSK_T3
                         && (device.state == DeviceState::BS_STATE_WAITING_EAP_MSG_4
                             || device.state == DeviceState::BS_STATE_SENT_EAP_MSG_3)
                     {
-                        if let Some(result) = LbpManager::Process_Joining_EAP_T3(device, &msg.bootstrapping_data, &mut pEAPData,
-                                &mut self.u8EAPIdentifier) {
+                        if let Some(result) = LbpManager::Process_Joining_EAP_T3(
+                            device,
+                            &msg.bootstrapping_data,
+                            &mut pEAPData,
+                            &mut self.u8EAPIdentifier,
+                        ) {
                             device.state = DeviceState::BS_STATE_SENT_EAP_MSG_ACCEPTED;
                             log::trace!("[BS] Slot updated to BS_STATE_SENT_EAP_MSG_ACCEPTED");
                             return Some(result);
@@ -360,12 +396,61 @@ impl LbpManager {
         // }
     }
 
-    pub fn process_msg(&mut self, lpb_message: &lbp::LbpMessage) -> Option<request::AdpLbpRequest> {
-        let mut out_message: Option<Vec<u8>> = None;
-        let addr: Option<TExtendedAddress> = None;
+    pub fn process_response(&mut self, lbp_response: &AdpG3LbpReponse) {
 
-        match lpb_message {
+        for (addr, device) in &mut self.devices {
+            if device.uc_pending_confirms == 1
+                && lbp_response.handle == device.uc_tx_handle
+                && device.state != DeviceState::BS_STATE_WAITING_JOINNING
+            {
+                device.uc_pending_confirms -= 1;
+                
+                if lbp_response.status == EAdpStatus::G3_SUCCESS {
+                    if device.uc_pending_confirms == 0 {
+                        match device.state {
+                            DeviceState::BS_STATE_SENT_EAP_MSG_1 => {
+                                device.state = DeviceState::BS_STATE_WAITING_EAP_MSG_2;
+                            }
+                            DeviceState::BS_STATE_SENT_EAP_MSG_3 => {
+                                
+                                device.state = DeviceState::BS_STATE_WAITING_EAP_MSG_4;
+                            }
+                            DeviceState::BS_STATE_SENT_EAP_MSG_ACCEPTED => {
+                                device.state = DeviceState::BS_STATE_WAITING_JOINNING;
+                                device.uc_pending_confirms = 0;
+                            }
+                            DeviceState::BS_STATE_SENT_EAP_MSG_DECLINED => {
+                                device.state = DeviceState::BS_STATE_WAITING_JOINNING;
+                                device.uc_pending_confirms = 0;
+                            }
+                            _ => {
+                                device.state = DeviceState::BS_STATE_WAITING_JOINNING;
+                                device.uc_pending_confirms = 0;
+                            }
+                        }
+                        log::trace!("device log {:?}", device);
+                    }
+                } else {
+                    device.state = DeviceState::BS_STATE_WAITING_JOINNING;
+                    device.uc_pending_confirms = 0;
+                }
+                device.ul_timeout = self.start_time.elapsed().as_millis() + UC_MESSAGE_TIMEOUT_MS;
+            } else if (device.uc_pending_confirms == 2
+                && lbp_response.handle == device.uc_pending_tx_handler)
+            {
+                device.uc_pending_confirms -= 1;   
+                device.ul_timeout = self.start_time.elapsed().as_millis() + UC_MESSAGE_TIMEOUT_MS;   
+            }
+        }
+
+    }
+    pub fn process_msg(&mut self, lbp_message: &lbp::LbpMessage) -> Option<request::AdpLbpRequest> {
+        let mut out_message: Option<Vec<u8>> = None;
+        let mut addr: Option<TExtendedAddress> = None;
+
+        match lbp_message {
             lbp::LbpMessage::Joining(joining_message) => {
+                addr = Some(joining_message.ext_addr);
                 out_message = self.Process_Joining0(&joining_message);
             }
             lbp::LbpMessage::Accepted(_) => todo!(),
@@ -387,7 +472,7 @@ impl LbpManager {
                 return Some(request::AdpLbpRequest::new(
                     addr.into(),
                     out,
-                    device.uc_tx_handle,
+                    device.uc_tx_handle - 1,
                     config::MAX_HOPS,
                     true,
                     0,
@@ -398,4 +483,74 @@ impl LbpManager {
 
         None
     }
+
+    // pub fn update_devices(&mut self)
+    // {
+    //     uint8_t uc_i;
+    
+    //     for (uc_i = 0; uc_i < BOOTSTRAP_NUM_SLOTS; uc_i++) {
+    //         /* log_show_slots_status(); */
+    //         if (bootstrap_slots[uc_i].e_state != BS_STATE_WAITING_JOINNING) {
+    //             if (timeout_is_past(bootstrap_slots[uc_i].ul_timeout)) {
+    //                 LOG_BOOTSTRAP(("[BS] timeout_is_past for %d\r\n",uc_i));
+    //                 if (bootstrap_slots[uc_i].uc_pending_confirms == 0) {
+    //                     if (bootstrap_slots[uc_i].uc_tx_attemps < BOOTSTRAP_MSG_MAX_RETRIES) {
+    //                         bootstrap_slots[uc_i].uc_tx_attemps++;
+    //                         if (bootstrap_slots[uc_i].e_state == BS_STATE_WAITING_EAP_MSG_2) {
+    //                             bootstrap_slots[uc_i].e_state = BS_STATE_SENT_EAP_MSG_1;
+    //                             LOG_BOOTSTRAP(("[BS] Slot updated to BS_STATE_SENT_EAP_MSG_1\r\n"));
+    //                             log_show_slots_status();
+    //                         } else if (bootstrap_slots[uc_i].e_state == BS_STATE_WAITING_EAP_MSG_4) {
+    //                             bootstrap_slots[uc_i].e_state = BS_STATE_SENT_EAP_MSG_3;
+    //                             LOG_BOOTSTRAP(("[BS] Slot updated to BS_STATE_SENT_EAP_MSG_3\r\n"));
+    //                             log_show_slots_status();
+    //                         }
+    
+    //                         struct TAddress dstAddr;
+    //                         struct TAdpGetConfirm getConfirm;
+    
+    //                         if (bootstrap_slots[uc_i].us_data_length > 0) {
+    //                             if (bootstrap_slots[uc_i].us_lba_src_addr == 0xFFFF) {
+    //                                 dstAddr.m_u8AddrLength = 8;
+    //                                 memcpy(dstAddr.m_u8ExtendedAddr, &bootstrap_slots[uc_i].m_LbdAddress.m_au8Value, 8);
+    //                             } else {
+    //                                 dstAddr.m_u8AddrLength = 2;
+    //                                 dstAddr.m_u16ShortAddr = bootstrap_slots[uc_i].us_lba_src_addr;
+    //                             }
+    
+    //                             if (bootstrap_slots[uc_i].uc_pending_confirms > 0) {
+    //                                 bootstrap_slots[uc_i].uc_pending_tx_handler = bootstrap_slots[uc_i].uc_tx_handle;
+    //                             }
+    
+    //                             bootstrap_slots[uc_i].uc_tx_handle = get_next_nsdu_handler();
+    //                             bootstrap_slots[uc_i].ul_timeout = oss_get_up_time_ms() + 1000 * us_msg_timeout_in_s;
+    //                             bootstrap_slots[uc_i].uc_pending_confirms++;
+    
+    //                             LOG_BOOTSTRAP(("[BS] Timeout detected. Re-sending MSG for slot: %d Attempt: %d \r\n", uc_i,
+    //                                     bootstrap_slots[uc_i].uc_tx_attemps));
+    //                             log_show_slots_status();
+    //                             LOG_BOOTSTRAP(("[BS] AdpLbpRequest Called, handler: %d \r\n", bootstrap_slots[uc_i].uc_tx_handle));
+    //                             AdpLbpRequest((struct TAdpAddress const *)&dstAddr,     /* Destination address */
+    //                                     bootstrap_slots[uc_i].us_data_length,                              /* NSDU length */
+    //                                     &bootstrap_slots[uc_i].auc_data[0],                                  /* NSDU */
+    //                                     bootstrap_slots[uc_i].uc_tx_handle,                            /* NSDU handle */
+    //                                     g_s_bs_conf.m_u8MaxHop,          						/* Max. Hops */
+    //                                     true,                                       /* Discover route */
+    //                                     0,                                          /* QoS */
+    //                                     false);                                     /* Security enable */
+    //                         }
+    //                     } else {
+    //                         LOG_BOOTSTRAP(("[BS] Reset slot %d:  \r\n", uc_i));
+    //                         bootstrap_slots[uc_i].e_state = BS_STATE_WAITING_JOINNING;
+    //                         bootstrap_slots[uc_i].uc_pending_confirms = 0;
+    //                         bootstrap_slots[uc_i].ul_timeout = 0xFFFFFFFF;
+    //                     }
+    //                 } else { /* Pending confirm then increase timeout time */
+    //                     LOG_BOOTSTRAP(("[BS] Pending confirm\r\n"));
+    //                     bootstrap_slots[uc_i].ul_timeout = oss_get_up_time_ms() + 1000 * us_msg_timeout_in_s;
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
 }

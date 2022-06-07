@@ -196,7 +196,7 @@ pub fn adp_message_to_lbp_message(msg: &adp::AdpG3LbpEvent) -> Option<LbpMessage
                 return Some(LbpMessage::Accepted(AcceptedMessage {ext_addr: ext_addr, bootstrapping_data: msg.nsdu[(LBP_MESSAGE_MIN_LEN)..].to_vec()}));
             },
             LbpMessageType::LBP_CHALLENGE => {
-                return Some(LbpMessage::Challenge(ChallengeMessage {ext_addr: ext_addr, bootstrapping_data: msg.nsdu[(LBP_MESSAGE_MIN_LEN)..].to_vec()}));
+                return Some(LbpMessage::Challenge(ChallengeMessage {ext_addr, bootstrapping_data: msg.nsdu[(LBP_MESSAGE_MIN_LEN)..].to_vec()}));
             },
             LbpMessageType::LBP_DECLINE => {
                 return Some(LbpMessage::Decline(DeclineMessage {ext_addr: ext_addr}));
