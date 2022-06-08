@@ -549,6 +549,7 @@ pub fn EAP_PSK_Encode_Message3(
     mac.update(&au8Seed);
 
     let au8MacS = mac.finalize();
+    let auMacSLen = au8MacS.clone().into_bytes().len();
 
     let mut header: Vec<u8> = Vec::new();
     // encode the EAP header; length field will be set at the end of the block
@@ -598,14 +599,11 @@ pub fn EAP_PSK_Encode_Message3(
 
     header[0] >>= 2;
 
-    log::trace!("{:#04x?}", header);
-    log::trace!("{:#02x?}", au8Nonce);
-    log::trace!("{:#02x?}", protected_data);
     if let Ok(data) = cipher.encrypt(
         eax::aead::generic_array::GenericArray::from_slice(&au8Nonce), 
         eax::aead::Payload {
             msg: &protected_data,
-            aad: &header[0..(header.len()-16)],
+            aad: &header[0..(header.len()- auMacSLen)], //remove au8Mac
         }
     ) {
         // log::trace!("data : {:X?}", data);
@@ -614,13 +612,10 @@ pub fn EAP_PSK_Encode_Message3(
         pMemoryBuffer.clear();
         pMemoryBuffer.append(&mut header);
         pMemoryBuffer.append(au8Nonce[12..].to_vec().borrow_mut());
-        // pMemoryBuffer.append(au8MacS.into_bytes().to_vec().borrow_mut());
+
         pMemoryBuffer.append(tag.to_vec().clone().borrow_mut());
         pMemoryBuffer.append(payload.to_vec().clone().borrow_mut());
-        // pMemoryBuffer.append();
-        // pMemoryBuffer.append(data.clone().borrow_mut());
 
-        // log::trace!("-----> {:X?}", pMemoryBuffer);
         return true;
     }
     return false;
@@ -651,20 +646,31 @@ pub fn EAP_PSK_Decode_Message4(
         let mut cipher = eax::Eax::<Aes128>::new(eax::aead::generic_array::GenericArray::from_slice(
             &pPskContext.m_Tek.0,
         ));
-        let pNonce = &pMessage[16..20];        
-        let protected_data = &pMessage[20..];
+        let pNonce = &pMessage[16..20]; 
+        let tag = &pMessage[20..36];       
+        let protected_data = &pMessage[36..];
         let mut au8Nonce = [0u8; 16];
         au8Nonce[12] = pNonce[0];
         au8Nonce[13] = pNonce[1];
         au8Nonce[14] = pNonce[2];
         au8Nonce[15] = pNonce[3];
-        let mut header = pHeader.clone();
+        let mut header = pHeader[0..22].to_vec(); //TODO, is this fixed?
         header[0] >>= 2;
+
+        log::trace!("TEK : {:?}", pPskContext.m_Tek);
+        log::trace!("Nonce/IV : {:X?}", au8Nonce);
+        log::trace!("Header : {:X?}", header);
+        log::trace!("Data-enc : {:X?}", protected_data);
+        log::trace!("Tag : {:X?}", tag);
+    
+        let mut data_and_tag: Vec<u8> = Vec::new();
+        data_and_tag.append(protected_data.to_vec().borrow_mut());
+        data_and_tag.append(tag.to_vec().borrow_mut());
 
         if let Ok(data) = cipher.decrypt(
             eax::aead::generic_array::GenericArray::from_slice(&au8Nonce),
             eax::aead::Payload {
-                msg: &protected_data,
+                msg: &data_and_tag,
                 aad: &header,
             },
         ) {

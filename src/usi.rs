@@ -296,8 +296,8 @@ impl InMessage {
                 if ch == common::PROTOCOL_ESC {
                     println!("Received ESC in Msg state");
                     self.rxState = RxState::RxError;
-                } else {
-                    self.buf.push(ch ^ 20);
+                } else {                    
+                    self.buf.push(ch ^ 0x20);
                     self.process_header();
                     self.rxState = RxState::RxMsg;
                 }
@@ -343,7 +343,7 @@ impl<'a, T: Read + Write + Send> Port<'a, T> where 'a: 'static, T:'static {
 
     // pub fn process<T>(&mut self, port: &mut T, listener:&Box<dyn message::MessageListener>) -> Option<Vec<u8>>
     pub fn process(&mut self) {
-        let mut b = [0; 1000];
+        let mut b = [0; 2048];
 
         match self.channel.read(&mut b) {
             Ok(t) => {
