@@ -168,13 +168,6 @@ impl LbpManager {
                 pData.push(1);
                 pData.push(p_au8CurrIndex);
             } else {
-                // /* Get current key index and set the new one to the other */
-                // if (p_au8CurrIndex == 0) {
-                // 	u8NewKeyIndex = 1;
-                // } else {
-                // 	u8NewKeyIndex = 0;
-                // }
-                // replace with u8NewKeyIndex = p_au8CurrIndex ^ 1;
                 pData.push(CONF_PARAM_GMK);
                 pData.push(17);
                 pData.push(p_au8CurrIndex ^ 0x01);
@@ -275,8 +268,8 @@ impl LbpManager {
             //First join message
             if (device.state == DeviceState::BS_STATE_WAITING_JOINNING) {
                 EAP_PSK_Initialize(&config::G_EAP_PSK_KEY, &mut device.m_PskContext);
-                // device.m_randS = TEapPskRand::new_random(); //TODO for testing we need deterministic to compare between the C coordinator and Rust coordinator
-                device.m_randS = config::RAND_S_DEFAULT.to_vec().into();
+                device.m_randS = TEapPskRand::new_random(); //TODO for testing we need deterministic to compare between the C coordinator and Rust coordinator
+                // device.m_randS = config::RAND_S_DEFAULT.to_vec().into();
 
                 
 
