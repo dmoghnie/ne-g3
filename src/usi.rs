@@ -1,11 +1,12 @@
 use log::{trace, warn};
-use std::{ 
+use std::{
     collections::VecDeque,
-    io::{Read, Write},    
+    io::{Read, Write},
+    thread,
     time::{Duration, SystemTime},
 };
 
-use crate::common::{self, PROTOCOL_PRIME_API, to_hex_string, array_to_hex_string};
+use crate::common::{self, array_to_hex_string, to_hex_string, PROTOCOL_PRIME_API};
 use crate::crc;
 use crate::usi;
 
@@ -21,7 +22,7 @@ pub enum Message {
     UsiIn(InMessage),
     UsiOut(OutMessage),
     HeartBeat(SystemTime),
-    SystemStartup
+    SystemStartup,
 }
 
 pub trait MessageHandler {
@@ -37,7 +38,7 @@ enum RxState {
     RxDone,
 }
 
-pub const RECEIVE_TIMEOUT:Duration = Duration::from_millis(10);
+pub const RECEIVE_TIMEOUT: Duration = Duration::from_millis(10);
 
 #[derive(Debug)]
 pub struct OutMessage {
@@ -144,7 +145,7 @@ pub struct InMessage {
     pub buf: Vec<u8>,
     rxState: RxState,
     pub protocol_type: Option<u8>,
-    payload_len: usize
+    payload_len: usize,
 }
 
 impl InMessage {
@@ -153,20 +154,20 @@ impl InMessage {
             rxState: RxState::RxIdle,
             buf: Vec::with_capacity(1024),
             payload_len: 0,
-            protocol_type: None
+            protocol_type: None,
         }
     }
     pub fn get_state(&self) -> &RxState {
         return &self.rxState;
     }
-    fn remove_header_and_crc (&mut self) {
+    fn remove_header_and_crc(&mut self) {
         if self.buf.len() >= 2 {
             self.buf = self.buf[2..].to_vec();
         }
         self.buf = self.buf[..self.payload_len].to_vec();
-        if self.protocol_type == Some(PROTOCOL_PRIME_API){   
+        if self.protocol_type == Some(PROTOCOL_PRIME_API) {
             self.buf[0] = common::CMD_PROTOCOL(self.buf[0]);
-        }        
+        }
     }
     fn process_header(&mut self) {
         if self.buf.len() < common::PROTOCOL_MIN_LEN.into() {
@@ -296,7 +297,7 @@ impl InMessage {
                 if ch == common::PROTOCOL_ESC {
                     println!("Received ESC in Msg state");
                     self.rxState = RxState::RxError;
-                } else {                    
+                } else {
                     self.buf.push(ch ^ 0x20);
                     self.process_header();
                     self.rxState = RxState::RxMsg;
@@ -318,31 +319,35 @@ pub enum PortState {
 pub struct Port<'a, T> {
     message: usi::InMessage,
     buf: VecDeque<u8>,
-    channel: T,    
+    channel: T,
     state: &'a PortState,
-    listeners: Vec<flume::Sender<Message>>
+    listeners: Vec<flume::Sender<Message>>,
 }
 
 //thread object should be static, makes sense! Since threads may live for the duration of the program
-impl<'a, T: Read + Write + Send> Port<'a, T> where 'a: 'static, T:'static { 
+impl<'a, T: Read + Write + Send> Port<'a, T>
+where
+    'a: 'static,
+    T: 'static,
+{
     pub fn new(channel: T) -> Port<'a, T> {
         Port {
             message: usi::InMessage::new(),
             buf: VecDeque::with_capacity(2048),
-            channel: channel,                    
+            channel: channel,
             state: &PortState::Stopped,
-            listeners: Vec::new()
+            listeners: Vec::new(),
         }
     }
     // pub fn post_cmd(&self, cmd: &'a MessageType) {
     //     self.cmd_tx_rx.0.send(cmd);
     // }
     pub fn add_listener(&mut self, listener: flume::Sender<Message>) {
-        self.listeners.push (listener);
-    }    
+        self.listeners.push(listener);
+    }
 
     // pub fn process<T>(&mut self, port: &mut T, listener:&Box<dyn message::MessageListener>) -> Option<Vec<u8>>
-    pub fn process(&mut self) {
+    fn process(&mut self) {
         let mut b = [0; 2048];
 
         match self.channel.read(&mut b) {
@@ -365,7 +370,7 @@ impl<'a, T: Read + Write + Send> Port<'a, T> where 'a: 'static, T:'static {
                         self.message.remove_header_and_crc();
                         for listener in &self.listeners {
                             listener.send(usi::Message::UsiIn(self.message.clone()));
-                        }                        
+                        }
                         // if let Some(ref sender) = sender {
                         //     sender.send(self.message.clone());
                         // }
@@ -383,6 +388,22 @@ impl<'a, T: Read + Write + Send> Port<'a, T> where 'a: 'static, T:'static {
                 warn!("Error {}", e);
             }
         }
+    }
+    pub fn start(mut self) -> flume::Sender<Message> {
+        let (tx, rx) = flume::unbounded::<Message>();
+        thread::spawn(move || loop {
+            self.process();
+            match rx.recv_timeout(usi::RECEIVE_TIMEOUT) {
+                Ok(msg) => match msg {
+                    Message::UsiOut(cmd) => {
+                        self.send(&cmd);
+                    }
+                    _ => {}
+                },
+                Err(e) => {}
+            }
+        });
+        tx
     }
 }
 

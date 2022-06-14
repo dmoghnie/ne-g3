@@ -1,10 +1,20 @@
-use std::{io, borrow::Borrow};
+use std::{borrow::Borrow, io};
 
-use crate::{adp, adp::{Message, EAdpStatus}, common, common::Parameter, request, usi::{self, MessageHandler}};
+use crate::app_config;
+use crate::{
+    adp,
+    adp::{EAdpStatus, Message},
+    common,
+    common::Parameter,
+    network_manager::NetworkManager,
+    request,
+    usi::{self, MessageHandler},
+};
+use bytes::BytesMut;
 use lazy_static::lazy_static;
 use log;
 use std::collections::HashMap;
-use crate::config;
+use packet::ip::v6::Packet;
 
 #[derive(thiserror::Error, Debug)]
 enum ModemError {
@@ -28,21 +38,23 @@ enum State {
     SettingParameters,
     JoiningNetwork,
     Ready,
-    SendingData
+    SendingData,
 }
-
 
 lazy_static! {
 
-    static ref MAC_STACK_PARAMETERS: Vec<(adp::EMacWrpPibAttribute, u16, Vec<u8>)> = vec![(        
-        adp::EMacWrpPibAttribute::MAC_WRP_PIB_SHORT_ADDRESS,
-        0,
-        config::SENDER.to_vec()
-    ), (adp::EMacWrpPibAttribute::MAC_WRP_PIB_PAN_ID, 0, vec![0x78, 0x1d])];
+    static ref MAC_STACK_PARAMETERS: Vec<(adp::EMacWrpPibAttribute, u16, Vec<u8>)> = vec![
+    //     (
+    //     adp::EMacWrpPibAttribute::MAC_WRP_PIB_SHORT_ADDRESS,
+    //     0,
+    //     app_config::SENDER.to_vec()
+    //     )
+    // ,
+    (adp::EMacWrpPibAttribute::MAC_WRP_PIB_PAN_ID, 0, app_config::PAN_ID.to_be_bytes().to_vec())];
     static ref ADP_STACK_PARAMETERS: Vec<(adp::EAdpPibAttribute, u16, Vec<u8>)> = vec![
-        (adp::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY, 0, config::CONF_PSK_KEY.to_vec()),
-        (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 0, config::CONF_CONTEXT_INFORMATION_TABLE_0.to_vec()),
-        (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 1, config::CONF_CONTEXT_INFORMATION_TABLE_1.to_vec()),
+        (adp::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY, 0, app_config::CONF_PSK_KEY.to_vec()),
+        (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 0, app_config::CONF_CONTEXT_INFORMATION_TABLE_0.to_vec()),
+        // (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 1, app_config::CONF_CONTEXT_INFORMATION_TABLE_1.to_vec()),
         (
             adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL,
             0,
@@ -53,12 +65,12 @@ lazy_static! {
             0,
             vec![0xB4, 0x00]
         ),
-        (        
+        (
             adp::EAdpPibAttribute::ADP_IB_MAX_JOIN_WAIT_TIME,
             0,
             vec![0x00, 0x5A]
         ),
-        (            
+        (
             adp::EAdpPibAttribute::ADP_IB_MAX_HOPS,
             0,
             vec![0x0A],
@@ -68,10 +80,11 @@ lazy_static! {
 
 pub struct Modem {
     cmd_tx: flume::Sender<usi::Message>,
+    net_tx: flume::Sender<adp::Message>,
     state: State,
     adp_param_idx: usize,
     mac_param_idx: usize,
-    handle: u8
+    handle: u8,
 }
 
 impl MessageHandler for Modem {
@@ -84,10 +97,14 @@ impl MessageHandler for Modem {
             }
             usi::Message::UsiOut(_) => {}
             usi::Message::HeartBeat(time) => {
-                log::trace!("Adp received heartbeat: {:?}, state: {:?}", time, self.state);
-                if self.state == State::Ready {
-                    self.sendData();
-                }
+                log::trace!(
+                    "Adp received heartbeat: {:?}, state: {:?}",
+                    time,
+                    self.state
+                );
+                // if self.state == State::Ready {
+                //     self.sendData();
+                // }
                 // self.sendData();
                 // if self.state == State::JoiningNetwork {
                 //     self.joinNetwork();
@@ -103,13 +120,14 @@ impl MessageHandler for Modem {
 }
 
 impl Modem {
-    pub fn new(cmd_tx: flume::Sender<usi::Message>) -> Self {
+    pub fn new(cmd_tx: flume::Sender<usi::Message>, net_tx: flume::Sender<adp::Message>) -> Self {
         Modem {
             cmd_tx: cmd_tx,
+            net_tx: net_tx,
             state: State::Start,
             adp_param_idx: 0,
             mac_param_idx: 0,
-            handle:0
+            handle: 0,
         }
     }
 
@@ -118,25 +136,29 @@ impl Modem {
             log::warn!("Received init in a non start state");
             return;
         }
-        
+
         self.initializeStack();
     }
 
     fn process_usi_in_message(&mut self, msg: &usi::InMessage) {
         if let Some(msg) = adp::usi_message_to_message(&msg) {
-            log::trace!("process_usi_in_message: state {:?}: msg: {:?}", self.state, msg);
+            log::trace!(
+                "process_usi_in_message: state {:?}: msg: {:?}",
+                self.state,
+                msg
+            );
             match self.state {
                 State::StackIntializing => {
                     self.process_state_stack_initializing(&msg);
-                },
+                }
                 State::SettingParameters => {
                     self.process_state_setting_parameters(&msg);
                 }
                 State::JoiningNetwork => {
                     self.process_state_joining_network(&msg);
-                },
+                }
                 State::SendingData => {
-                    self.process_state_sending_data (&msg);
+                    self.process_state_sending_data(&msg);
                 }
                 State::Ready => {}
                 _ => {
@@ -149,7 +171,6 @@ impl Modem {
     fn process_state_stack_initializing(&mut self, msg: &adp::Message) {
         match msg {
             Message::AdpG3MsgStatusResponse(status_response) => {
-                
                 self.setParameters();
             }
             _ => {}
@@ -159,42 +180,49 @@ impl Modem {
         match msg {
             Message::AdpG3NetworkJoinResponse(join_network_response) => {
                 if join_network_response.status == EAdpStatus::G3_SUCCESS {
-                    self.state = State::Ready;
-                }
-                else{
+                    // self.state = State::Ready;
+                } else {
                     log::warn!("Failed to join network"); // TODO, recovery
                 }
+            },
+            Message::AdpG3SetMacResponse(mac_set_response) => {
+                log::trace!("Mac Set response {:?}", mac_set_response);
+                self.state = State::Ready;
             }
-            _=>{}
+            _ => {}
         }
     }
     fn process_ready_state(&mut self, msg: &adp::Message) {}
     fn process_state_setting_parameters(&mut self, msg: &adp::Message) {
-
-
         match msg {
             Message::AdpG3SetMacResponse(_) => {
                 self.mac_param_idx = self.mac_param_idx + 1;
-            },
+            }
             Message::AdpG3SetResponse(_) => {
                 self.adp_param_idx = self.adp_param_idx + 1;
-            },
+            }
             _ => {}
         }
-        log::trace!("process_state_setting_parameters: mac index : {}, adp index : {} : msg: {:?}", self.mac_param_idx, self.adp_param_idx, msg);
-        if (self.adp_param_idx + self.mac_param_idx) >= (MAC_STACK_PARAMETERS.len() + ADP_STACK_PARAMETERS.len()) {
-             self.joinNetwork();
-        }
-        else{
+        log::trace!(
+            "process_state_setting_parameters: mac index : {}, adp index : {} : msg: {:?}",
+            self.mac_param_idx,
+            self.adp_param_idx,
+            msg
+        );
+        if (self.adp_param_idx + self.mac_param_idx)
+            >= (MAC_STACK_PARAMETERS.len() + ADP_STACK_PARAMETERS.len())
+        {
+            self.joinNetwork();
+        } else {
             self.setParameters();
         }
     }
-    fn process_state_sending_data(&mut self, msg: &adp::Message){
+    fn process_state_sending_data(&mut self, msg: &adp::Message) {
         // self.sendData();
     }
-    fn initializeStack(&mut self) {        
+    fn initializeStack(&mut self) {
         self.state = State::StackIntializing;
-        let cmd = request::AdpInitializeRequest::from_band(config::BAND);
+        let cmd = request::AdpInitializeRequest::from_band(app_config::BAND);
         match self.send_cmd(cmd.into()) {
             Err(e) => {
                 //TODO, retry ?!
@@ -203,45 +231,65 @@ impl Modem {
             _ => {}
         }
     }
+    fn set_short_addr(&self, short_addr: u16) {
+        let v = short_addr.to_be_bytes().to_vec();
+        let cmd = request::AdpMacSetRequest::new(
+            adp::EMacWrpPibAttribute::MAC_WRP_PIB_SHORT_ADDRESS,
+            0,
+            &v,
+        );
+        if let Err(e) = self.send_cmd(cmd.into()) {
+            log::warn!("Failed to send parameter MAC_WRP_PIB_SHORT_ADDRESS : {:?} ", e);
+        }
+    }
     fn setParameters(&mut self) {
-        log::trace!("setParameters: mac index : {}, adp index : {}", self.mac_param_idx, self.adp_param_idx);
+        log::trace!(
+            "setParameters: mac index : {}, adp index : {}",
+            self.mac_param_idx,
+            self.adp_param_idx
+        );
         self.state = State::SettingParameters;
 
         if self.mac_param_idx < MAC_STACK_PARAMETERS.len() {
             let attribute = &MAC_STACK_PARAMETERS[self.mac_param_idx];
-            let cmd = request::AdpMacSetRequest::new (attribute.0, attribute.1, &attribute.2);
-            if let Err(e) = self.send_cmd(cmd.into()){
+            let cmd = request::AdpMacSetRequest::new(attribute.0, attribute.1, &attribute.2);
+            if let Err(e) = self.send_cmd(cmd.into()) {
                 log::warn!("Failed to send set parameter {:?}", attribute.0);
             }
-        } 
-        else if self.adp_param_idx < ADP_STACK_PARAMETERS.len() {
+        } else if self.adp_param_idx < ADP_STACK_PARAMETERS.len() {
             let attribute = &ADP_STACK_PARAMETERS[self.adp_param_idx];
-            let cmd = request::AdpSetRequest::new (attribute.0, attribute.1, &attribute.2);
-            if let Err(e) = self.send_cmd(cmd.into()){
+            let cmd = request::AdpSetRequest::new(attribute.0, attribute.1, &attribute.2);
+            if let Err(e) = self.send_cmd(cmd.into()) {
                 log::warn!("Failed to send set parameter {:?}", attribute.0);
             }
         }
     }
     fn joinNetwork(&mut self) {
-        // let get_address_request = request::AdpMacGetRequest::new(adp::EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_EXTENDED_ADDRESS, 0);                
+        // let get_address_request = request::AdpMacGetRequest::new(adp::EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_EXTENDED_ADDRESS, 0);
         // self.send_cmd(get_address_request.into());
         self.state = State::JoiningNetwork;
-        let cmd = request::AdpJoinNetworkRequest {pan_id: config::PAN_ID, lba_address: 0};
+        let cmd = request::AdpJoinNetworkRequest {
+            pan_id: *app_config::PAN_ID,
+            lba_address: 0,
+        };
         if let Err(e) = self.send_cmd(cmd.into()) {
             log::warn!("Failed to send network start request {}", e);
         }
     }
-    
-    fn sendData(&mut self) {
-        self.state = State::SendingData;
-        let receiver = config::RECEIVER.to_vec();
-        let cmd1 = request::AdpSetRequest::new (adp::EAdpPibAttribute::ADP_IB_DESTINATION_ADDRESS_SET, 0, 
-            &receiver);
-        self.send_cmd (cmd1.into());
-        self.handle = self.handle + 1;
-        let cmd = request::AdpDataRequest::new (self.handle, &vec![1,2,3,4,5,6], true, 0);
-        self.send_cmd (cmd.into());
-    }
+
+    // fn sendData(&mut self) {
+    //     self.state = State::SendingData;
+    //     let receiver = app_config::RECEIVER.to_vec();
+    //     let cmd1 = request::AdpSetRequest::new(
+    //         adp::EAdpPibAttribute::ADP_IB_DESTINATION_ADDRESS_SET,
+    //         0,
+    //         &receiver,
+    //     );
+    //     self.send_cmd(cmd1.into());
+    //     self.handle = self.handle + 1;
+    //     let cmd = request::AdpDataRequest::new(self.handle, &vec![1, 2, 3, 4, 5, 6], true, 0);
+    //     self.send_cmd(cmd.into());
+    // }
 
     fn send_cmd(&self, msg: usi::OutMessage) -> Result<(), ModemError> {
         match self.cmd_tx.send(usi::Message::UsiOut(msg)) {

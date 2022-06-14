@@ -1,6 +1,6 @@
 use std::io;
 
-use crate::config;
+use crate::app_config;
 use crate::lbp;
 use crate::{
     adp,
@@ -11,9 +11,11 @@ use crate::{
     lbp_manager, request,
     usi::{self, MessageHandler},
 };
+use bytes::BytesMut;
 use lazy_static::lazy_static;
 use log;
 use std::collections::HashMap;
+use packet::ip::v6::Packet;
 
 #[derive(thiserror::Error, Debug)]
 enum CoordError {
@@ -49,7 +51,7 @@ lazy_static! {
         (
             adp::EMacWrpPibAttribute::MAC_WRP_PIB_PAN_ID,
             0,
-            config::PAN_ID.to_be_bytes().to_vec()
+            app_config::PAN_ID.to_be_bytes().to_vec()
         )
     ];
     static ref ADP_STACK_PARAMETERS: Vec<(adp::EAdpPibAttribute, u16, Vec<u8>)> = vec![
@@ -61,9 +63,9 @@ lazy_static! {
             vec![0x00, 0x5A]
         ),
         (adp::EAdpPibAttribute::ADP_IB_MAX_HOPS, 0, vec![0x0A]),
-        (adp::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY, 0, config::CONF_PSK_KEY.to_vec()),
-        (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 0, config::CONF_CONTEXT_INFORMATION_TABLE_0.to_vec()),
-        (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 1, config::CONF_CONTEXT_INFORMATION_TABLE_1.to_vec()),
+        (adp::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY, 0, app_config::CONF_PSK_KEY.to_vec()),
+        (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 0, app_config::CONF_CONTEXT_INFORMATION_TABLE_0.to_vec()),
+        // (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 1, app_config::CONF_CONTEXT_INFORMATION_TABLE_1.to_vec()),
         (
             adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL,
             0,
@@ -81,6 +83,7 @@ lazy_static! {
 
 pub struct Coordinator {
     cmd_tx: flume::Sender<usi::Message>,
+    net_tx: flume::Sender<adp::Message>,
     state: State,
     adp_param_idx: usize,
     mac_param_idx: usize,
@@ -105,6 +108,10 @@ impl MessageHandler for Coordinator {
             usi::Message::SystemStartup => {
                 self.init();
             }
+            
+            _ => {
+
+            }
         }
         log::trace!("<-Coord : state ({:?})", self.state);
         return true;
@@ -112,9 +119,10 @@ impl MessageHandler for Coordinator {
 }
 
 impl Coordinator {
-    pub fn new(cmd_tx: flume::Sender<usi::Message>) -> Self {
+    pub fn new(cmd_tx: flume::Sender<usi::Message>, net_tx: flume::Sender<adp::Message>) -> Self {
         Coordinator {
-            cmd_tx: cmd_tx,
+            cmd_tx: cmd_tx,       
+            net_tx: net_tx,     
             state: State::Start,
             adp_param_idx: 0,
             mac_param_idx: 0,
@@ -149,7 +157,7 @@ impl Coordinator {
                     self.process_state_starting_network(&msg);
                 }
                 State::Ready => {
-                    self.process_state_ready(&msg);
+                    self.process_state_ready(msg);
                 }
                 _ => {
                     log::warn!("Received a message in an invalid state");
@@ -180,7 +188,7 @@ impl Coordinator {
             _ => {}
         }
     }
-    fn process_state_ready(&mut self, msg: &adp::Message) {
+    fn process_state_ready(&mut self, msg: adp::Message) {
         match msg {
             Message::AdpG3LbpEvent(lbp_event) => {
                 if let Some(lbp_message) = lbp::adp_message_to_lbp_message(lbp_event) {
@@ -191,7 +199,7 @@ impl Coordinator {
                 }
             }
             Message::AdpG3LbpReponse(lbp_response) => {
-                self.lbp_manager.process_response (lbp_response);
+                self.lbp_manager.process_response (&lbp_response);
             }
             _ => {
 
@@ -224,7 +232,7 @@ impl Coordinator {
     }
     fn initializeStack(&mut self) {
         self.state = State::StackIntializing;
-        let cmd = request::AdpInitializeRequest::from_band(config::BAND);
+        let cmd = request::AdpInitializeRequest::from_band(app_config::BAND);
         match self.send_cmd(cmd.into()) {
             Err(e) => {
                 //TODO, retry ?!
@@ -257,7 +265,7 @@ impl Coordinator {
     }
     fn startNetwork(&mut self) {
         self.state = State::StartingNetwork;
-        let cmd = request::AdpNetworkStartRequest::new(config::PAN_ID);
+        let cmd = request::AdpNetworkStartRequest::new(*app_config::PAN_ID);
         if let Err(e) = self.send_cmd(cmd.into()) {
             log::warn!("Failed to send network start request {}", e);
         }
@@ -265,7 +273,7 @@ impl Coordinator {
     fn joinNetwork(&mut self) {
         // self.state = State::JoiningNetwork;
         let cmd = request::AdpJoinNetworkRequest {
-            pan_id: config::PAN_ID,
+            pan_id: *app_config::PAN_ID,
             lba_address: 0,
         };
         if let Err(e) = self.send_cmd(cmd.into()) {

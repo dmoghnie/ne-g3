@@ -1,4 +1,4 @@
-mod config;
+mod app_config;
 mod adp;
 mod app;
 mod common;
@@ -10,6 +10,7 @@ mod request;
 mod usi;
 mod lbp_functions;
 mod lbp_manager;
+mod network_manager;
 
 use std::time::{Duration, SystemTime};
 use std::{env, io, str, thread};
@@ -17,6 +18,8 @@ use std::{env, io, str, thread};
 use bytes::BytesMut;
 use env_logger::Env;
 use flume::{Receiver, Sender};
+use packet::ip::v6::Packet;
+
 
 use std::io::{Read, Result as IoResult, Write};
 // use crossbeam_channel::{bounded, Sender};
@@ -36,11 +39,18 @@ use crate::usi::{Message, MessageHandler, OutMessage, UsiSender};
 
 const TIMER_RESOLUTION: Duration = Duration::from_millis(20000);
 
-fn main() {
-    // let (tx, rx) = flume::unbounded();
-    // let (adp_msg_sender, adp_msg_receiver) = bounded(100);
 
+fn main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("trace")).init();
+
+    let s = app_config::SETTINGS.read().unwrap();
+    
+    log::trace!("Settings : {:?}", s);
+
+    log::trace!("CONF_CONTEXT_INFORMATION_TABLE_0 : {:X?}", network_manager::NetworkManager::CONF_CONTEXT_INFORMATION_TABLE_0(s.g3.pan_id));
+    log::trace!("ipv6 from short addr {:?}", network_manager::NetworkManager::ipv6_from_short_addr(s.g3.pan_id, 5));
+    // dbg!(config::APP_CONFIG);
+    
     info!("Starting ...");
     let mut args = env::args();
     let tty_path = args.nth(1).unwrap_or_else(|| DEFAULT_TTY.into());
@@ -56,28 +66,32 @@ fn main() {
         .open()
         .expect("Failed to open port {}");
 
-    let (app_tx, app_rx) = flume::unbounded::<(Message)>();
-    let (usi_tx, usi_rx) = flume::unbounded::<Message>();
+    let (app_tx, app_rx) = flume::unbounded::<Message>();
+    // let (usi_tx, usi_rx) = flume::unbounded::<Message>();
+    let (net_tx, net_rx) = flume::unbounded::<adp::Message>();
 
     // let request = request::AdpInitializeRequest::from_band(message::TAdpBand::ADP_BAND_CENELEC_A);
     let sender = app_tx.clone();
-    let t = thread::spawn(move || {
-        let mut usi_port = usi::Port::new(Box::new(port));
-        // log::trace!("Listening on port {}", tty_path);
-        usi_port.add_listener(sender);
-        loop {
-            usi_port.process();
-            match usi_rx.recv_timeout(usi::RECEIVE_TIMEOUT) {
-                Ok(msg) => match msg {
-                    Message::UsiOut(cmd) => {
-                        usi_port.send(&cmd);
-                    }
-                    _ => {}
-                },
-                Err(e) => {}
-            }
-        }
-    });
+    let mut usi = usi::Port::new (port);
+    usi.add_listener(sender);
+    let usi_tx = usi.start();
+    // let t = thread::spawn(move || {
+    //     let mut usi_port = usi::Port::new(Box::new(port));
+    //     // log::trace!("Listening on port {}", tty_path);
+    //     usi_port.add_listener(sender);
+    //     loop {
+    //         usi_port.process();
+    //         match usi_rx.recv_timeout(usi::RECEIVE_TIMEOUT) {
+    //             Ok(msg) => match msg {
+    //                 Message::UsiOut(cmd) => {
+    //                     usi_port.send(&cmd);
+    //                 }
+    //                 _ => {}
+    //             },
+    //             Err(e) => {}
+    //         }
+    //     }
+    // });
 
     let cmd_tx = usi_tx.clone();
 
@@ -96,12 +110,12 @@ fn main() {
     // });
 
     let t2 = thread::spawn(move || {
-        let mut message_handler: Option<Box<dyn MessageHandler>>;
+        let message_handler: Option<Box<dyn MessageHandler>>;
         if is_coordinator {
-            message_handler = Some(Box::new(coord::Coordinator::new(cmd_tx)));
+            message_handler = Some(Box::new(coord::Coordinator::new(cmd_tx, net_tx)));
             
         } else {
-            message_handler = Some(Box::new(modem::Modem::new(cmd_tx)));
+            message_handler = Some(Box::new(modem::Modem::new(cmd_tx, net_tx)));
         }
         if let Some(mut handler) = message_handler {
             loop {
@@ -123,38 +137,24 @@ fn main() {
         system_tx.send(Message::HeartBeat(SystemTime::now()));
         thread::sleep(TIMER_RESOLUTION);
     });
+
+    //Network Manager
+
+    let network_handle = thread::spawn(move || {
+        let mut network_manager = network_manager::NetworkManager::new (usi_tx);
+        loop {
+            match net_rx.recv() {
+                Ok(msg) => network_manager.process_g3_packet(&msg),
+                Err(_) => {
+                    log::trace!("Error receiving ip packet form g3");
+                },
+            }
+        }
+        }
+    );
+
+
     t2.join().unwrap();
-    // match usi_port.send (&request.try_into().unwrap()){
-    //     Ok(size) => {
-    //         trace!("sent cmd");
-    //     },
-    //     Err(e) => {
-    //         warn!("Failed to send cmd {}", e);
-    //     }
-    // };
-    // // let listener = Box::new(Listener()) as Box<dyn MessageListener>;
-    // let handle = thread::spawn (move || {
-    //     loop {
-    //         // device.process(&mut port, &listener);
-    //         usi_port.process(Some(&tx));
-
-    //     }
-    // });
-
-    // let receiver = thread::spawn(move || {
-    //     loop {
-    //         let msg = rx.recv();
-    //         match msg {
-    //             Ok(msg) => {
-    //                 let m = message::usi_message_to_message (&msg);
-    //                 log::trace!("Receiver received {:?}", m);
-    //             },
-    //             Err(e) => {
-    //                 log::warn!("Error receiving message");
-    //             }
-    //         }
-    //     }
-    // });
-
-    // handle.join().unwrap();
+    
+    
 }

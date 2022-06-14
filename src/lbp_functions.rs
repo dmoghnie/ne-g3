@@ -115,7 +115,14 @@ impl TEapPskRand {
 }
 impl From<Vec<u8>> for TEapPskRand {
     fn from(v: Vec<u8>) -> Self {
-        let u: [u8; 16] = v.try_into().unwrap();
+        let u: [u8; 16] = v.try_into().unwrap(); //TODO, remove the unwrap
+
+        return TEapPskRand(u);
+    }
+}
+impl From<&[u8]> for TEapPskRand {
+    fn from(v: &[u8]) -> Self {
+        let u: [u8; 16] = v.try_into().unwrap(); //TODO, remove the unwrap
 
         return TEapPskRand(u);
     }
@@ -175,7 +182,7 @@ impl TEapPskContext {
     }
 }
 
-pub fn EAP_PSK_Initialize(pKey: &TEapPskKey, pPskContext: &mut TEapPskContext) -> bool {
+pub fn eap_psk_initialize(pKey: &TEapPskKey, pPskContext: &mut TEapPskContext) -> bool {
     let mut block = aes::cipher::generic_array::GenericArray::from([0u8; 16]);
 
     // let encryptor = aes_embedded::AES128::new (&(pKey.0));
@@ -203,16 +210,16 @@ pub fn EAP_PSK_Initialize(pKey: &TEapPskKey, pPskContext: &mut TEapPskContext) -
 }
 
 
-pub fn EAP_PSK_InitializeTEK(pRandP: &TEapPskRand, pPskContext: &mut TEapPskContext) -> bool {
-    log::trace!("->EAP_PSK_InitializeTEK : {:?}, {:?}", pRandP, pPskContext.m_Kdk.0);
-    let encryptor = aes::Aes128::new_from_slice(&pPskContext.m_Kdk.0);
+pub fn eap_psk_initialize_tek(p_rand_p: &TEapPskRand, p_psk_context: &mut TEapPskContext) -> bool {
+    log::trace!("->EAP_PSK_InitializeTEK : {:?}, {:?}", p_rand_p, p_psk_context.m_Kdk.0);
+    let encryptor = aes::Aes128::new_from_slice(&p_psk_context.m_Kdk.0);
     if let Ok(encryptor) = encryptor {
-        let mut v = aes::cipher::generic_array::GenericArray::from(pRandP.0);
+        let mut v = aes::cipher::generic_array::GenericArray::from(p_rand_p.0);
         aes::cipher::BlockEncrypt::encrypt_block(&encryptor, &mut v);
         v[15] ^= 0x01;
         aes::cipher::BlockEncrypt::encrypt_block(&encryptor, &mut v);
-        pPskContext.m_Tek.0 = v.into();
-        log::trace!("->EAP_PSK_InitializeTEK : {:?}, {:?}", pRandP, pPskContext.m_Tek);
+        p_psk_context.m_Tek.0 = v.into();
+        log::trace!("->EAP_PSK_InitializeTEK : {:?}, {:?}", p_rand_p, p_psk_context.m_Tek);
         true
     } else {
         log::warn!("EAP_PSK_InitializeTEK : Failed to get encryptor");
@@ -220,46 +227,46 @@ pub fn EAP_PSK_InitializeTEK(pRandP: &TEapPskRand, pPskContext: &mut TEapPskCont
     }
 }
 
-pub fn EAP_PSK_Decode_Message(
-    pMessage: &Vec<u8>,
-    pu8Code: &mut u8,
-    pu8Identifier: &mut u8,
-    pu8TSubfield: &mut u8,
-    pEAPData: &mut Vec<u8>,
+pub fn eap_psk_decode_message(
+    p_message: &Vec<u8>,
+    pu8_code: &mut u8,
+    pu8_identifier: &mut u8,
+    pu8_tsubfield: &mut u8,
+    p_eap_data: &mut Vec<u8>,
 ) -> bool {
-    let mut bRet = false;
+    let mut b_ret = false;
 
-    if (pMessage.len() >= 4) {
-        *pu8Code = pMessage[0];
-        *pu8Identifier = pMessage[1];
-        let u16EapMessageLength: usize = ((pMessage[2] as usize) << 8) | pMessage[3] as usize;
+    if p_message.len() >= 4 {
+        *pu8_code = p_message[0];
+        *pu8_identifier = p_message[1];
+        let u16_eap_message_length: usize = ((p_message[2] as usize) << 8) | p_message[3] as usize;
 
         // A message with the Length field set to a value larger than the number of received octets MUST be silently discarded.
-        bRet = (u16EapMessageLength <= pMessage.len());
+        b_ret = u16_eap_message_length <= p_message.len();
 
-        if (bRet && (u16EapMessageLength >= 6)) {
-            *pu8TSubfield = pMessage[5];
-            *pEAPData = pMessage[6..].to_vec();
-            bRet = (pMessage[4] == EAP_PSK_IANA_TYPE);
+        if b_ret && (u16_eap_message_length >= 6) {
+            *pu8_tsubfield = p_message[5];
+            *p_eap_data = p_message[6..].to_vec();
+            b_ret = (p_message[4] == EAP_PSK_IANA_TYPE);
         }
     }
 
-    return bRet;
+    return b_ret;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
-pub fn EAP_PSK_Decode_Message1(
-    pMessage: &Vec<u8>,
-    pRandS: &mut TEapPskRand,
-    pIdS: &mut TEapPskNetworkAccessIdentifier,
+pub fn eap_psk_decode_message1(
+    p_message: &Vec<u8>,
+    p_rand_s: &mut TEapPskRand,
+    p_id_s: &mut TEapPskNetworkAccessIdentifier,
 ) -> bool {
     let mut bRet = false;
 
     // check the length of the message
-    if (pMessage.len() >= pRandS.0.len()) {
-        *pRandS = pMessage[0..16].to_vec().into();
+    if (p_message.len() >= p_rand_s.0.len()) {
+        *p_rand_s = p_message[0..16].to_vec().into();
         //   memcpy(pRandS->m_au8Value, pMessage, sizeof(pRandS->m_au8Value));
-        pIdS.0 = pMessage[16..].to_vec();
+        p_id_s.0 = p_message[16..].to_vec();
         bRet = true;
     }
 
@@ -267,47 +274,47 @@ pub fn EAP_PSK_Decode_Message1(
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
-pub fn EAP_PSK_Encode_Message2(
-    pPskContext: &TEapPskContext,
-    u8Identifier: u8,
-    pRandS: &TEapPskRand,
-    pRandP: &TEapPskRand,
-    pIdS: &TEapPskNetworkAccessIdentifier,
-    pIdP: &TEapPskNetworkAccessIdentifier,
-    pMemoryBuffer: &mut Vec<u8>,
+pub fn eap_psk_encode_message2(
+    p_psk_context: &TEapPskContext,
+    p_u8_identifier: u8,
+    p_rand_s: &TEapPskRand,
+    p_rand_p: &TEapPskRand,
+    p_id_s: &TEapPskNetworkAccessIdentifier,
+    p_id_p: &TEapPskNetworkAccessIdentifier,
+    p_memory_buffer: &mut Vec<u8>,
 ) {
     // check the size of the buffer
-    if (pMemoryBuffer.capacity() >= 62) {
+    if (p_memory_buffer.capacity() >= 62) {
         //TODO panic or increase size?
         // compute first MacP = CMAC-AES-128(AK, IdP||IdS||RandS||RandP)
         let mut au8Seed: Vec<u8> = Vec::new();
 
-        let mut mac = Cmac::<aes::Aes128>::new_from_slice(&pPskContext.m_Ak.0).unwrap();
+        let mut mac = Cmac::<aes::Aes128>::new_from_slice(&p_psk_context.m_Ak.0).unwrap();
 
         //   ret = cipher_wrapper_cipher_setup( &m_ctx, cipher_info );
         //   LOG_DBG(Log("\n cipher_wrapper_cipher_setup returned %d %d", ret, m_ctx.cipher_info->type));
-        au8Seed.append(&mut pIdP.0.to_vec());
-        au8Seed.append(&mut pIdS.0.to_vec());
-        au8Seed.append(&mut pRandS.0.to_vec());
-        au8Seed.append(&mut pRandP.0.to_vec());
+        au8Seed.append(&mut p_id_p.0.to_vec());
+        au8Seed.append(&mut p_id_s.0.to_vec());
+        au8Seed.append(&mut p_rand_s.0.to_vec());
+        au8Seed.append(&mut p_rand_p.0.to_vec());
         mac.update(&au8Seed);
 
-        let au8MacP = mac.finalize();
+        let au8_mac_p = mac.finalize();
         // encode the EAP header; length field will be set at the end of the block
-        pMemoryBuffer.push(EAP_RESPONSE);
-        pMemoryBuffer.push(u8Identifier);
-        pMemoryBuffer.push(0);
-        pMemoryBuffer.push(0);
-        pMemoryBuffer.push(EAP_PSK_IANA_TYPE);
-        pMemoryBuffer.push(EAP_PSK_T1);
-        pMemoryBuffer.append(&mut pRandS.0.to_vec());
-        pMemoryBuffer.append(&mut pRandP.0.to_vec());
-        pMemoryBuffer.append(&mut au8MacP.into_bytes().to_vec());
-        pMemoryBuffer.append(&mut pIdP.0.to_vec());
+        p_memory_buffer.push(EAP_RESPONSE);
+        p_memory_buffer.push(p_u8_identifier);
+        p_memory_buffer.push(0);
+        p_memory_buffer.push(0);
+        p_memory_buffer.push(EAP_PSK_IANA_TYPE);
+        p_memory_buffer.push(EAP_PSK_T1);
+        p_memory_buffer.extend_from_slice(&p_rand_s.0);
+        p_memory_buffer.extend_from_slice(&p_rand_p.0);
+        p_memory_buffer.extend_from_slice(&au8_mac_p.into_bytes().to_vec());
+        p_memory_buffer.extend_from_slice(&p_id_p.0);
 
         //   // now update the EAP header length field
-        pMemoryBuffer[2] = ((pMemoryBuffer.len() >> 8) & 0x00FF) as u8;
-        pMemoryBuffer[3] = (pMemoryBuffer.len() & 0x00FF) as u8;
+        p_memory_buffer[2] = ((p_memory_buffer.len() >> 8) & 0x00FF) as u8;
+        p_memory_buffer[3] = (p_memory_buffer.len() & 0x00FF) as u8;
 
         //   UNUSED(ret);
     }
@@ -316,41 +323,41 @@ pub fn EAP_PSK_Encode_Message2(
 /**********************************************************************************************************************/
 /** The EAP_PSK_Decode_Message3 primitive is used to decode the third EAP-PSK message (type 2)
  **********************************************************************************************************************/
-pub fn EAP_PSK_Decode_Message3(
-    pMessage: &Vec<u8>,
-    pPskContext: &TEapPskContext,
-    pHeader: Vec<u8>,
-    pRandS: &mut TEapPskRand,
-    pu32Nonce: &mut u32,
-    pu8PChannelResult: &mut u8,
-    pPChannelData: &mut Vec<u8>,
+pub fn eap_psk_decode_message3(
+    p_message: &Vec<u8>,
+    p_psk_context: &TEapPskContext,
+    p_header: Vec<u8>,
+    p_rand_s: &mut TEapPskRand,
+    p_u32_nonce: &mut u32,
+    p_u8_pchannel_result: &mut u8,
+    p_pchannel_data: &mut Vec<u8>,
 ) -> bool {
-    let mut bRet = false;
+    let mut b_ret = false;
 
-    if (pMessage.len() >= 59) {
-        *pRandS = pMessage[0..16].to_vec().into();
-        let macS = &pMessage[16..32];
+    if p_message.len() >= 59 {
+        *p_rand_s = p_message[0..16].to_vec().into();
+        let mac_s = &p_message[16..32];
 
         // verify MacS: MAC_S = CMAC-AES-128(AK, IdS||RandP)
-        let mut au8Seed: Vec<u8> = Vec::new();
+        let mut au8_seed: Vec<u8> = Vec::new();
 
-        let mut mac = Cmac::<aes::Aes128>::new_from_slice(&pPskContext.m_Ak.0).unwrap();
+        let mut mac = Cmac::<aes::Aes128>::new_from_slice(&p_psk_context.m_Ak.0).unwrap();
 
-        au8Seed.append(&mut pPskContext.m_IdS.0.to_vec());
-        au8Seed.append(&mut pPskContext.m_RandP.0.to_vec());
-        mac.update(&au8Seed);
-        let au8MacS = mac.finalize().into_bytes().to_vec();
+        au8_seed.extend_from_slice(&p_psk_context.m_IdS.0);
+        au8_seed.extend_from_slice(&p_psk_context.m_RandP.0);
+        mac.update(&au8_seed);
+        let au8_mac_s = mac.finalize().into_bytes().to_vec();
 
-        if au8MacS == macS {
-            let key = eax::aead::generic_array::GenericArray::from_slice(&pPskContext.m_Tek.0);
-            let pNonce = &pMessage[32..36];
+        if au8_mac_s == mac_s {
+            let key = eax::aead::generic_array::GenericArray::from_slice(&p_psk_context.m_Tek.0);
+            let p_nonce = &p_message[32..36];
             // let pTag = pMessage[36..52];
-            let pProtectedData = &pMessage[36..];
-            let mut au8Nonce: [u8; 16] = [0; 16];
-            au8Nonce[12] = pNonce[0];
-            au8Nonce[13] = pNonce[1];
-            au8Nonce[14] = pNonce[2];
-            au8Nonce[15] = pNonce[3];
+            let p_protected_data = &p_message[36..];
+            let mut au8_nonce: [u8; 16] = [0; 16];
+            au8_nonce[12] = p_nonce[0];
+            au8_nonce[13] = p_nonce[1];
+            au8_nonce[14] = p_nonce[2];
+            au8_nonce[15] = p_nonce[3];
             let mut cipher = eax::Eax::<Aes128>::new(key);
             // The protected data is the 22 bytes header of the EAP message.
             // The G3 specifies a slightly modified EAP header but in the same time
@@ -360,44 +367,44 @@ pub fn EAP_PSK_Decode_Message3(
             // auth tag and then we change back the header
 
             // right shift Code field with 2 bits as indicated in the EAP specification
-            let mut header = pHeader.clone();
+            let mut header = p_header.clone();
             header[0] >>= 2; //TODO, check if header has any data
 
             if let Ok(data) = cipher.decrypt(
-                GenericArray::from_slice(&au8Nonce),
+                GenericArray::from_slice(&au8_nonce),
                 Payload {
-                    msg: pProtectedData,
+                    msg: p_protected_data,
                     aad: &header,
                 },
             ) {
-                *pu8PChannelResult = (data[0] & 0xC0) >> 6;
-                *pPChannelData = data[1..].to_vec();
-                *pu32Nonce = u32::from_be_bytes([pNonce[3], pNonce[2], pNonce[1], pNonce[0]]);
+                *p_u8_pchannel_result = (data[0] & 0xC0) >> 6;
+                *p_pchannel_data = data[1..].to_vec();
+                *p_u32_nonce = u32::from_be_bytes([p_nonce[3], p_nonce[2], p_nonce[1], p_nonce[0]]);
             }
         }
     }
-    return bRet;
+    return b_ret;
 }
 
 /**********************************************************************************************************************/
 /** The EAP_PSK_Encode_Message4 primitive is used to encode the second EAP-PSK message (type 3)
  **********************************************************************************************************************/
-pub fn EAP_PSK_Encode_Message4(
-    pPskContext: &TEapPskContext,
-    u8Identifier: u8,
-    pRandS: &TEapPskRand,
-    u32Nonce: u32,
-    u8PChannelResult: u8,
-    pPChannelData: Vec<u8>,
-    pProtectedData: &mut Vec<u8>,
+pub fn eap_psk_encode_message4(
+    p_psk_context: &TEapPskContext,
+    u8_identifier: u8,
+    p_rand_s: &TEapPskRand,
+    u32_nonce: u32,
+    u8_pchannel_result: u8,
+    p_pchannel_data: Vec<u8>,
+    p_protected_data: &mut Vec<u8>,
 ) -> bool {
     let mut header: Vec<u8> = Vec::with_capacity(22);
 
-    let mut au8Nonce = [0u8; 16];
+    let mut au8_nonce = [0u8; 16];
 
     // encode the EAP header; length field will be set at the end of the block
     header.push(EAP_RESPONSE);
-    header.push(u8Identifier);
+    header.push(u8_identifier);
     header.push(0);
     header.push(0);
     header.push(EAP_PSK_IANA_TYPE);
@@ -405,34 +412,34 @@ pub fn EAP_PSK_Encode_Message4(
 
     // EAP message: add PSK fields
 
-    header.append(&mut pRandS.0.to_vec());
+    header.extend_from_slice(&p_rand_s.0);
 
     // nonce should be big endian
-    au8Nonce[12] = ((u32Nonce >> 24) & 0xFF) as u8;
-    au8Nonce[13] = ((u32Nonce >> 16) & 0xFF) as u8;
-    au8Nonce[14] = ((u32Nonce >> 8) & 0xFF) as u8;
-    au8Nonce[15] = ((u32Nonce) & 0xFF) as u8;
+    au8_nonce[12] = ((u32_nonce >> 24) & 0xFF) as u8;
+    au8_nonce[13] = ((u32_nonce >> 16) & 0xFF) as u8;
+    au8_nonce[14] = ((u32_nonce >> 8) & 0xFF) as u8;
+    au8_nonce[15] = ((u32_nonce) & 0xFF) as u8;
 
     // protected data
     let mut protected_data: Vec<u8> = Vec::new();
 
-    if (pPChannelData.len() > 0) {
+    if (p_pchannel_data.len() > 0) {
         // result / extension = 1
-        protected_data.push((u8PChannelResult << 6) | 0x20);
-        protected_data.append(pPChannelData.clone().borrow_mut());
+        protected_data.push((u8_pchannel_result << 6) | 0x20);
+        protected_data.extend_from_slice(&p_pchannel_data);
     } else {
         // result / extension = 0
-        protected_data.push((u8PChannelResult << 6));
+        protected_data.push((u8_pchannel_result << 6));
     }
 
     let mut cipher = eax::Eax::<Aes128>::new(eax::aead::generic_array::GenericArray::from_slice(
-        &pPskContext.m_Tek.0,
+        &p_psk_context.m_Tek.0,
     ));
 
     header[0] >>= 2;
 
     if let Ok(data) = cipher.encrypt(
-        eax::aead::generic_array::GenericArray::from_slice(&au8Nonce),
+        eax::aead::generic_array::GenericArray::from_slice(&au8_nonce),
         eax::aead::Payload {
             msg: &protected_data,
             aad: &header,
@@ -442,10 +449,10 @@ pub fn EAP_PSK_Encode_Message4(
         let len = header.len() + 4 + data.len();
         header[2] = ((len >> 8) & 0x00FF) as u8;
         header[3] = (len & 0x00FF) as u8;
-        pProtectedData.clear();
-        pProtectedData.append(&mut header);
-        pProtectedData.append(au8Nonce[12..].to_vec().borrow_mut());
-        pProtectedData.append(data.clone().borrow_mut());
+        p_protected_data.clear();
+        p_protected_data.extend_from_slice(&header);
+        p_protected_data.extend_from_slice(&au8_nonce[12..]);
+        p_protected_data.extend_from_slice(&data);
         return true;
     }
     return false;
@@ -470,24 +477,20 @@ pub fn EAP_PSK_Encode_Message4(
 //    * @return encoded length or 0 if encoding failed
 //    *
 //    **********************************************************************************************************************/
-pub fn EAP_PSK_Encode_Message1(
-    u8Identifier: u8,
-    pRandS: &TEapPskRand,
-    pIdS: &TEapPskNetworkAccessIdentifierS,
-    out_message: &mut Vec<u8>,
-) {
-    out_message.clear();
-    out_message.push(EAP_REQUEST);
-    out_message.push(u8Identifier);
-    out_message.push(0);
-    out_message.push(0);
-    out_message.push(EAP_PSK_IANA_TYPE);
-    out_message.push(EAP_PSK_T0);
-    out_message.append(pRandS.0.to_vec().borrow_mut());
-    out_message.append(pIdS.0.to_vec().borrow_mut());
+pub fn eap_psk_encode_message1(
+    u8_identifier: u8,
+    p_rand_s: &TEapPskRand,
+    p_id_s: &TEapPskNetworkAccessIdentifierS,
+    
+) -> Vec<u8> {
+    let mut v = vec![EAP_REQUEST, u8_identifier, 0, 0,EAP_PSK_IANA_TYPE, EAP_PSK_T0];
+    v.extend_from_slice(&p_rand_s.0);
+    v.extend_from_slice(&p_id_s.0);
 
-    out_message[2] = ((out_message.len() >> 8) & 0x00FF) as u8;
-    out_message[3] = (out_message.len() & 0x00FF) as u8;
+    v[2] = ((v.len() >> 8) & 0x00FF) as u8;
+    v[3] = (v.len() & 0x00FF) as u8;
+
+    v
 }
 
 //   /**********************************************************************************************************************/
@@ -496,33 +499,30 @@ pub fn EAP_PSK_Encode_Message1(
 //    ***********************************************************************************************************************
 //    *
 //    **********************************************************************************************************************/
-pub fn EAP_PSK_Decode_Message2(
-    pMessage: &Vec<u8>,
-    pPskContext: &TEapPskContext,
-    pIdS: &TEapPskNetworkAccessIdentifierS,
-    pRandS: &mut TEapPskRand,
-    pRandP: &mut TEapPskRand,
+pub fn eap_psk_decode_message2(
+    p_message: &[u8],
+    p_psk_context: &TEapPskContext,
+    p_id_s: &TEapPskNetworkAccessIdentifierS,
+    p_rand_s: &mut TEapPskRand,
+    p_rand_p: &mut TEapPskRand,
 ) -> bool {
-    *pRandS = pMessage[0..16].to_vec().into();
-    *pRandP = pMessage[16..32].to_vec().into();
-    let au8MacP = pMessage[32..48].to_vec();
-    let idP_uc_size = 8usize;
+    *p_rand_s = p_message[0..16].into();
+    *p_rand_p = p_message[16..32].into();
+    let au8_mac_p = &p_message[32..48];
+    let id_p_uc_size = 8usize;
 
-    let idP = pMessage[48..(48 + idP_uc_size)].to_vec();
+    let id_p = &p_message[48..(48 + id_p_uc_size)];
 
-    let mut au8Seed = idP.to_vec();
-    au8Seed.append(pIdS.0.to_vec().borrow_mut());
+    let mut au8_seed = id_p.to_vec();
+    au8_seed.extend_from_slice(&p_id_s.0);
     // compute MacP = CMAC-AES-128(AK, IdP||IdS||RandS||RandP)
-    au8Seed.append(pRandS.0.to_vec().borrow_mut());
-    au8Seed.append(pRandP.0.to_vec().borrow_mut());
+    au8_seed.extend_from_slice(&p_rand_s.0);
+    au8_seed.extend_from_slice(&p_rand_p.0);
 
-    let mut mac = Cmac::<aes::Aes128>::new_from_slice(&pPskContext.m_Ak.0).unwrap();
-    mac.update(&au8Seed);
-    let au8ExpectedMacP = mac.finalize();
-    if au8ExpectedMacP.into_bytes().to_vec() == au8MacP.to_vec() {
-        return true;
-    }
-    return false;
+    let mut mac = Cmac::<aes::Aes128>::new_from_slice(&p_psk_context.m_Ak.0).unwrap();
+    mac.update(&au8_seed);
+    let au8_expected_mac_p = mac.finalize();
+    return  au8_expected_mac_p.into_bytes().to_vec() == au8_mac_p.to_vec();
 }
 
 //   /**********************************************************************************************************************/
@@ -538,9 +538,8 @@ pub fn EAP_PSK_Encode_Message3(
     pIds: &TEapPskNetworkAccessIdentifierS,
     u32Nonce: u32,
     u8PChannelResult: u8,
-    pPChannelData: &Vec<u8>,
-    pMemoryBuffer: &mut Vec<u8>,
-) -> bool {
+    pPChannelData: &[u8],    
+) -> Option<Vec<u8>> {
     let mut mac = Cmac::<aes::Aes128>::new_from_slice(&pPskContext.m_Ak.0).unwrap();
     let mut au8Seed: Vec<u8> = Vec::new();
     au8Seed.append(pIds.0.to_vec().borrow_mut());
@@ -582,7 +581,7 @@ pub fn EAP_PSK_Encode_Message3(
     if (pPChannelData.len() > 0) {
         // result / extension = 1
         protected_data.push((u8PChannelResult << 6) | 0x20);
-        protected_data.append(pPChannelData.clone().borrow_mut());
+        protected_data.extend_from_slice(pPChannelData);        
     } else {
         // result / extension = 0
         protected_data.push((u8PChannelResult << 6));
@@ -609,16 +608,16 @@ pub fn EAP_PSK_Encode_Message3(
         // log::trace!("data : {:X?}", data);
         let (payload, tag) = data.split_at(protected_data.len());
         header[0] <<= 2;
-        pMemoryBuffer.clear();
-        pMemoryBuffer.append(&mut header);
-        pMemoryBuffer.append(au8Nonce[12..].to_vec().borrow_mut());
+        let mut result_vec = vec![];
+        result_vec.append(&mut header);
+        result_vec.extend_from_slice(&au8Nonce[12..]);
 
-        pMemoryBuffer.append(tag.to_vec().clone().borrow_mut());
-        pMemoryBuffer.append(payload.to_vec().clone().borrow_mut());
+        result_vec.extend_from_slice(tag);
+        result_vec.extend_from_slice(payload);
 
-        return true;
+        return Some(result_vec);
     }
-    return false;
+    return None;
 }
 
 //   /**********************************************************************************************************************/
@@ -690,16 +689,11 @@ pub fn EAP_PSK_Decode_Message4(
 //    *
 //    **********************************************************************************************************************/
   pub fn EAP_PSK_Encode_EAP_Success(
-    u8Identifier: u8,
-    pMemoryBuffer: &mut Vec<u8>
-    )
+    u8Identifier: u8,    
+    ) -> Option<Vec<u8>>
   {
-    pMemoryBuffer.clear();
-    // check the size of the buffer
-    pMemoryBuffer.push(EAP_SUCCESS);
-    pMemoryBuffer.push(u8Identifier);
-    pMemoryBuffer.push(0);
-    pMemoryBuffer.push(4);
+     Some(vec![EAP_SUCCESS, u8Identifier, 0, 4])
+    // check the size of the buffer        
   }
 
 //   /**********************************************************************************************************************/

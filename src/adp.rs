@@ -175,10 +175,10 @@ impl Into<Vec<u8>> for TAddress {
 
         match self {
             Self::Short(a) => {
-                v.append(&mut a.to_be_bytes().to_vec());
+                v.extend_from_slice(&a.to_be_bytes());
             }
             Self::Extended(e) => {
-                v.append(&mut e.0.to_vec());
+                v.extend_from_slice(&e.0);
             }
         }
         return v;
@@ -779,7 +779,7 @@ impl AdpG3GetMacResponse {
                     && msg.buf.len() >= (MIN_GET_RESPONSE_LEN + 1 + attribute_len as usize))
                 {
                     if let Some(content) = msg.buf.get(9..) {
-                        result.attribute_val.append(&mut content.to_vec());
+                        result.attribute_val.extend_from_slice(&content);
                     }
                 }
                 return Some(result);
@@ -825,14 +825,14 @@ impl AdpG3LbpEvent {
         if msg.buf.len() >= LBP_EVENT_MIN + 1 {
             let src_addr = (msg.buf[1] as u16) << 8 | (msg.buf[2] as u16);
             let nsdu_len = ((msg.buf[3] as u16) << 8 | (msg.buf[4] as u16)) as usize;
-            let mut nsdu = Vec::with_capacity(nsdu_len);
+            let mut nsdu:Option<Vec<u8>> = None;
             let mut pos = 5usize;
             if let Some(d) = msg.buf.get(pos..(pos + nsdu_len) as usize) {
-                nsdu = d.to_vec();
+                nsdu = Some(d.to_vec());
                 pos = pos + nsdu_len;
             }
-            if let (Some(link_quality_indicator), Some(security_enabled)) =
-                (msg.buf.get(pos), msg.buf.get(pos + 1usize))
+            if let (Some(link_quality_indicator), Some(security_enabled), Some(nsdu)) =
+                (msg.buf.get(pos), msg.buf.get(pos + 1usize), nsdu)
             {
                 return Some(AdpG3LbpEvent {
                     src_addr,
@@ -931,9 +931,9 @@ pub struct AdpG3ResetResponse {}
 
 #[derive(Debug)]
 pub struct AdpG3SetMacResponse {
-    status: EAdpStatus,
-    attribute_id: u32,
-    attribute_idx: u16,
+    pub status: EAdpStatus,
+    pub attribute_id: u32,
+    pub attribute_idx: u16,
 }
 impl AdpG3SetMacResponse {
     pub fn try_from_message(msg: &usi::InMessage) -> Option<AdpG3SetMacResponse> {

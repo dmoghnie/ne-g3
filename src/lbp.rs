@@ -60,7 +60,7 @@ pub struct JoiningMessage {
 pub struct AcceptedMessage {
     pub ext_addr: TExtendedAddress,
 
-    pub bootstrapping_data: Vec<u8>,
+    pub bootstrapping_data: Option<Vec<u8>>
 }
 // impl AcceptedMessage {
 //     pub fn new(ext_addr: TExtendedAddress, short_addr: u16) -> Self {
@@ -102,8 +102,10 @@ impl Into<Vec<u8>> for AcceptedMessage {
         let mut v = vec![(cmd << 4), 0x0 /*transaction id is reserved */];
         let mut a = self.ext_addr.0.to_vec().clone();        
         // a.reverse();
-        v.append(&mut a);
-        v.append(&mut self.bootstrapping_data);
+        v.extend_from_slice(&self.ext_addr.0);
+        if let Some(data) = self.bootstrapping_data {
+            v.extend_from_slice(&data);
+        }
         return v;
     }
 }
@@ -111,14 +113,16 @@ impl Into<Vec<u8>> for AcceptedMessage {
 #[derive(Debug)]
 pub struct ChallengeMessage {
     pub ext_addr: TExtendedAddress,
-    pub bootstrapping_data: Vec<u8>,
+    pub bootstrapping_data: Option<Vec<u8>>,
 }
 impl Into<Vec<u8>> for ChallengeMessage {
-    fn into(mut self) -> Vec<u8> {
+    fn into(self) -> Vec<u8> {
         let cmd: u8 = LbpMessageType::LBP_CHALLENGE.into();
         let mut v = vec![(cmd << 4), 0x0 /*transaction id is reserved */];
-        v.append(&mut self.ext_addr.0.to_vec());
-        v.append(&mut self.bootstrapping_data);
+        v.extend_from_slice(&self.ext_addr.0);
+        if let Some(data) = self.bootstrapping_data {
+            v.extend_from_slice(&data);    
+        }        
         return v;
     }
 }
@@ -179,33 +183,34 @@ A_LBD: 8 bytes: Indicates the EUI-64 address of the bootstrapping device (LBD).
 
 pub const LBP_MESSAGE_MIN_LEN:usize = adp::ADP_ADDRESS_64BITS + 2usize; // is the sum of both T and Code
 
-pub fn adp_message_to_lbp_message(msg: &adp::AdpG3LbpEvent) -> Option<LbpMessage> {
+pub fn adp_message_to_lbp_message(msg: adp::AdpG3LbpEvent) -> Option<LbpMessage> {
     // u8MessageType = ((pNsdu[0] & 0xF0) >> 4);
-    if msg.nsdu.len() < LBP_MESSAGE_MIN_LEN {
+    if &msg.nsdu.len() < &LBP_MESSAGE_MIN_LEN {
         return None;
     }
-    if let Ok(lbp_msg_type) = LbpMessageType::try_from_primitive (((msg.nsdu[0] & 0xF0) >> 4)) {
+    let nsdu = &msg.nsdu;
+    if let Ok(lbp_msg_type) = &LbpMessageType::try_from_primitive ((&nsdu[0] & 0xF0) >> 4) {
         
-        if let Ok(ext_addr) = msg.nsdu[2..(LBP_MESSAGE_MIN_LEN)].try_into() {   
+        if let Ok(ext_addr) = &msg.nsdu[2..(LBP_MESSAGE_MIN_LEN)].try_into() {   
             
         match lbp_msg_type {
             LbpMessageType::LBP_JOINING => {                
-                return Some(LbpMessage::Joining(JoiningMessage {ext_addr: ext_addr, bootstrapping_data: msg.nsdu[(LBP_MESSAGE_MIN_LEN)..].to_vec()}));
+                return Some(LbpMessage::Joining(JoiningMessage {ext_addr: *ext_addr, bootstrapping_data: msg.nsdu[(LBP_MESSAGE_MIN_LEN)..].to_vec()}));
             }
             LbpMessageType::LBP_ACCEPTED => {
-                return Some(LbpMessage::Accepted(AcceptedMessage {ext_addr: ext_addr, bootstrapping_data: msg.nsdu[(LBP_MESSAGE_MIN_LEN)..].to_vec()}));
+                return Some(LbpMessage::Accepted(AcceptedMessage {ext_addr: *ext_addr, bootstrapping_data: Some(msg.nsdu[(LBP_MESSAGE_MIN_LEN)..].to_vec())}));
             },
             LbpMessageType::LBP_CHALLENGE => {
-                return Some(LbpMessage::Challenge(ChallengeMessage {ext_addr, bootstrapping_data: msg.nsdu[(LBP_MESSAGE_MIN_LEN)..].to_vec()}));
+                return Some(LbpMessage::Challenge(ChallengeMessage {ext_addr: *ext_addr, bootstrapping_data: Some(msg.nsdu[(LBP_MESSAGE_MIN_LEN)..].to_vec())}));
             },
             LbpMessageType::LBP_DECLINE => {
-                return Some(LbpMessage::Decline(DeclineMessage {ext_addr: ext_addr}));
+                return Some(LbpMessage::Decline(DeclineMessage {ext_addr: *ext_addr}));
             },
             LbpMessageType::LBP_KICK_FROM_LBD => {
-                return Some(LbpMessage::KickFromLbd(KickFromLbdMessage {ext_addr: ext_addr}));
+                return Some(LbpMessage::KickFromLbd(KickFromLbdMessage {ext_addr: *ext_addr}));
             },
             LbpMessageType::LBP_KICK_TO_LBD => {
-                return Some(LbpMessage::KickToLbd(KickToLbdMessage {ext_addr: ext_addr}));
+                return Some(LbpMessage::KickToLbd(KickToLbdMessage {ext_addr: *ext_addr}));
             },
         }
     }
