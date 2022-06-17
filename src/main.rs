@@ -75,39 +75,9 @@ fn main() {
     let mut usi = usi::Port::new (port);
     usi.add_listener(sender);
     let usi_tx = usi.start();
-    // let t = thread::spawn(move || {
-    //     let mut usi_port = usi::Port::new(Box::new(port));
-    //     // log::trace!("Listening on port {}", tty_path);
-    //     usi_port.add_listener(sender);
-    //     loop {
-    //         usi_port.process();
-    //         match usi_rx.recv_timeout(usi::RECEIVE_TIMEOUT) {
-    //             Ok(msg) => match msg {
-    //                 Message::UsiOut(cmd) => {
-    //                     usi_port.send(&cmd);
-    //                 }
-    //                 _ => {}
-    //             },
-    //             Err(e) => {}
-    //         }
-    //     }
-    // });
 
     let cmd_tx = usi_tx.clone();
 
-    // let t2 = thread::spawn(move || {
-    //     let mut app = app::App::new(is_coordinator ,&cmd_tx);
-    //     loop {
-    //         match app_rx.recv() {
-    //             Ok(msg) => {
-    //                 if !app.process_msg(&msg) {
-    //                     break;
-    //                 }
-    //             }
-    //             Err(e) => {}
-    //         }
-    //     }
-    // });
 
     let t2 = thread::spawn(move || {
         let message_handler: Option<Box<dyn MessageHandler>>;

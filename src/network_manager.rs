@@ -1,7 +1,7 @@
 use std::{
     intrinsics::transmute,
     net::{Ipv4Addr, Ipv6Addr},
-    vec,
+    vec, thread,
 };
 
 use bytes::BytesMut;
@@ -9,12 +9,13 @@ use packet::ip::v6::Packet;
 
 use crate::{adp::{self, EAdpStatus}, usi};
 
-use tun::{platform::Queue, Device, IntoAddress};
+use tun::{platform::{Queue, posix}, Device, IntoAddress};
 #[cfg(target_os = "macos")]
 
 pub struct NetworkManager {
     cmd_tx: flume::Sender<usi::Message>,
-    tun: Option<Box<dyn Device<Queue = Queue>>>,
+    tun_reader: Option<posix::Reader>,
+    tun_writer: Option<posix::Writer>,
 }
 /*
 By design, the G3-PLC protocol stack allows native support of the IPv6 protocol, which grants end-user flexibility to fulfil business requirements when choosing the appropriate higher layers (ISO/OSI transport and application layers). This key feature also secures G3-PLC infrastructures in the long term, thanks to the scalability and future application compatibility provided by IPv6.
@@ -35,7 +36,9 @@ impl NetworkManager {
     pub fn new(cmd_tx: flume::Sender<usi::Message>) -> Self {
         NetworkManager {
             cmd_tx: cmd_tx,
-            tun: None,
+            tun_reader: None,
+            tun_writer: None,
+            
         }
     }
     pub fn ipv4_from_short_addr(short_addr: u16) -> Ipv4Addr {
@@ -58,29 +61,41 @@ impl NetworkManager {
         v[13] = b[1];
         v
     }
-    pub fn process_g3_packet(&mut self, msg: &adp::Message) {
+    fn process_adp_message(&mut self, msg: &adp::Message) {
         match msg {
             adp::Message::AdpG3DataEvent(packet) => {}
             adp::Message::AdpG3NetworkStartResponse(network_start_response) => {
-                if (network_start_response.status == EAdpStatus::G3_SUCCESS){
+                if network_start_response.status == EAdpStatus::G3_SUCCESS {
                     self.start_tun(0);
                 }
             }
             adp::Message::AdpG3NetworkJoinResponse(network_join_response) => {
-                if (network_join_response.status == EAdpStatus::G3_SUCCESS){
+                if network_join_response.status == EAdpStatus::G3_SUCCESS {
                     self.start_tun(network_join_response.network_addr);
                 }
             }
             _ => {}
         }
     }
-    fn start_tun(&mut self, short_addr: u16) {
+    fn start_tun(&mut self, short_addr: u16) -> Option<(posix::Reader, posix::Writer)> {
         let ipv4 = Self::ipv4_from_short_addr(short_addr);
         let mut config = tun::Configuration::default();
 
         config.address(&ipv4).netmask((255, 255, 0, 0)).up();
-        if let Ok(t) = tun::create(&config){
-            self.tun = Some(Box::new(t));
-        }
+        tun::create(&config).map_or(None, |v| Some(v.split()))        
+    }
+    pub fn start(mut self) -> flume::Sender<adp::Message> {
+        let (rx, tx) = flume::unbounded::<adp::Message>();
+        thread::spawn (move || {
+            match tx.recv() {
+                Ok(msg) => {
+                    self.process_adp_message(&msg);
+                },
+                Err(e) => {
+                    log::warn!("NetworkManager error receiving adp message {}", e);
+                },
+            }
+        });
+        rx
     }
 }
