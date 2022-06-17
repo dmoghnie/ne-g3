@@ -114,7 +114,7 @@ fn main() {
         let mut network_manager = network_manager::NetworkManager::new (usi_tx);
         loop {
             match net_rx.recv() {
-                Ok(msg) => network_manager.process_g3_packet(&msg),
+                Ok(msg) => network_manager.process_adp_message(msg),
                 Err(_) => {
                     log::trace!("Error receiving ip packet form g3");
                 },

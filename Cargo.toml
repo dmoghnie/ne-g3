@@ -6,15 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-#tokio = { version = "1.18.0", features = ["full"] }
 serialport = "4.1.0"
-#tokio-util = {version = "0.7", features = ["codec"]}
-#tokio-serial = "5.4.1"
-#mio-serial = "5.0.1"
-bytes = "1"
 cfg-if = "1"
 #futures = "0.3"
-log = "0.4.3"
+log = "0.4.17"
 env_logger = "0.9"
 num_enum = "0.5.7"
 # crossbeam = "0.8.1"
@@ -35,4 +30,15 @@ config = "*"
 serde = "*"
 serde_derive = "*"
 packet = "*"
-tun = "0.5.3"
+tun = {version = "0.5.3", features = ["async"]}
+
+[target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "ios", target_os = "android"))'.dependencies]
+tokio = { version = "1.19.2", features = ["net", "macros", "rt-multi-thread", "time"]}
+# tokio-stream = "*"
+tokio-util = { version = "0.7.3", features = ["codec"]}
+
+bytes = { version = "1.1.0"}
+byteorder = { version = "1.4.3"}
+# This is only for the `ready` macro.
+futures-core = { version = "0.3.21" }
+futures = "0.3.21"

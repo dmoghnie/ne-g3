@@ -1,21 +1,107 @@
 use std::{
     intrinsics::transmute,
     net::{Ipv4Addr, Ipv6Addr},
-    vec, thread,
+    thread, vec, sync::{atomic::AtomicBool, Arc}, collections::HashMap,
 };
 
 use bytes::BytesMut;
-use packet::ip::v6::Packet;
 
-use crate::{adp::{self, EAdpStatus}, usi};
+use config::Config;
 
-use tun::{platform::{Queue, posix}, Device, IntoAddress};
-#[cfg(target_os = "macos")]
+use packet::{builder::Builder, icmp, ip, Packet};
+
+use futures::{SinkExt, StreamExt};
+use tokio::time::{self, Duration};
+
+use tun::platform::posix;
+use tun::{self, AsyncDevice, Configuration, TunPacket, TunPacketCodec};
+use std::sync::atomic::{Ordering};
+
+use crate::{
+    adp::{self, EAdpStatus},
+    usi,
+};
+
+enum TunMessage {
+    Data(TunPacket),
+    Stop,
+    Error(tun::Error),
+}
+
+struct TunDevice {
+    listener: flume::Sender<TunMessage>,
+    device: Option<AsyncDevice>,
+}
+
+impl TunDevice {
+    pub fn new(listener: flume::Sender<TunMessage>) -> Self {
+        TunDevice {
+            listener,
+            device: None,
+        }
+    }
+
+    pub async fn start_async(self, config: Configuration, source: flume::Sender<TunMessage>) -> flume::Sender<TunMessage> {
+        let dev = tun::create_as_async(&config).unwrap();
+        let (tx, rx) = flume::unbounded::<TunMessage>();
+        let (mut writer, mut reader) = dev.into_framed().split();
+        // let mut running = AtomicBool::new(true);
+        let running = Arc::new(AtomicBool::new(false)); 
+        let should_run = running.clone();
+        tokio::spawn(async move {
+            loop {
+                match tokio::time::timeout(Duration::from_millis(1000), reader.next()).await {
+                    Ok(packet) => {
+                        if let Some(pkt) = packet {
+                            match pkt {
+                                Ok(packet) => {
+                                    source.send(TunMessage::Data(packet)); //TODO check the result
+                                },
+                                Err(e) => {
+                                    log::warn!("TunDevice error reading {}", e);
+                                    source.send(TunMessage::Error(tun::Error::Io(e)));
+                                },
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        if !running.load(Ordering::SeqCst) {
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+
+        
+        tokio::spawn(async move {
+            loop {
+                match rx.recv_async().await {
+                    Ok(msg) => {
+                        match msg {
+                            TunMessage::Data(packet) => {
+                                writer.send(packet);
+                            },
+                            TunMessage::Stop => {
+                                should_run.store(false, Ordering::SeqCst);
+                                break                                
+                            },
+                            TunMessage::Error(_) => {},
+                        }                        
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to send packet {:?}", e);
+                    }
+                }
+            }
+        });
+        tx
+    }
+}
 
 pub struct NetworkManager {
     cmd_tx: flume::Sender<usi::Message>,
-    tun_reader: Option<posix::Reader>,
-    tun_writer: Option<posix::Writer>,
+    tun_devices: HashMap<u16, flume::Sender<TunMessage>>
 }
 /*
 By design, the G3-PLC protocol stack allows native support of the IPv6 protocol, which grants end-user flexibility to fulfil business requirements when choosing the appropriate higher layers (ISO/OSI transport and application layers). This key feature also secures G3-PLC infrastructures in the long term, thanks to the scalability and future application compatibility provided by IPv6.
@@ -34,12 +120,7 @@ fe80:0000:0000:0000 (hexadecimal representation)
 */
 impl NetworkManager {
     pub fn new(cmd_tx: flume::Sender<usi::Message>) -> Self {
-        NetworkManager {
-            cmd_tx: cmd_tx,
-            tun_reader: None,
-            tun_writer: None,
-            
-        }
+        NetworkManager { cmd_tx: cmd_tx, tun_devices: HashMap::new()}
     }
     pub fn ipv4_from_short_addr(short_addr: u16) -> Ipv4Addr {
         let b = short_addr.to_be_bytes();
@@ -61,7 +142,7 @@ impl NetworkManager {
         v[13] = b[1];
         v
     }
-    fn process_adp_message(&mut self, msg: &adp::Message) {
+    pub fn process_adp_message(&mut self, msg: adp::Message) {
         match msg {
             adp::Message::AdpG3DataEvent(packet) => {}
             adp::Message::AdpG3NetworkStartResponse(network_start_response) => {
@@ -82,20 +163,34 @@ impl NetworkManager {
         let mut config = tun::Configuration::default();
 
         config.address(&ipv4).netmask((255, 255, 0, 0)).up();
-        tun::create(&config).map_or(None, |v| Some(v.split()))        
+        tun::create(&config).map_or(None, |v| Some(v.split()))
     }
+
     pub fn start(mut self) -> flume::Sender<adp::Message> {
-        let (rx, tx) = flume::unbounded::<adp::Message>();
-        thread::spawn (move || {
-            match tx.recv() {
+        let (tx, rx) = flume::unbounded::<adp::Message>();
+        thread::spawn(move || loop {
+            match rx.recv() {
                 Ok(msg) => {
-                    self.process_adp_message(&msg);
+                    match msg {
+                        adp::Message::AdpG3DataEvent(packet) => {}
+                        adp::Message::AdpG3NetworkStartResponse(network_start_response) => {
+                            if network_start_response.status == EAdpStatus::G3_SUCCESS {
+                                self.start_tun(0);
+                            }
+                        }
+                        adp::Message::AdpG3NetworkJoinResponse(network_join_response) => {
+                            if network_join_response.status == EAdpStatus::G3_SUCCESS {
+                                self.start_tun(network_join_response.network_addr);
+                            }
+                        }
+                        _ => {}
+                    }
                 },
                 Err(e) => {
-                    log::warn!("NetworkManager error receiving adp message {}", e);
+                    log::warn!("Network manager failed to receive message {}", e);
                 },
             }
         });
-        rx
+        tx
     }
 }
