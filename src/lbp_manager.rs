@@ -84,7 +84,7 @@ impl DeviceManager {
             devices: HashMap::new(),
             short_addresses: HashMap::new(),
             // ip_addresses: HashMap::new(),
-            initial_short_address: 0,
+            initial_short_address: 1,
         }
     }
    

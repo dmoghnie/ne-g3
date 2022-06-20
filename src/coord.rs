@@ -157,12 +157,13 @@ impl Coordinator {
                     self.process_state_starting_network(&msg);
                 }
                 State::Ready => {
-                    self.process_state_ready(msg);
+                    self.process_state_ready(&msg);
                 }
                 _ => {
                     log::warn!("Received a message in an invalid state");
                 }
             }
+            self.net_tx.send(msg);
         } else {
             log::warn!("Failed to parse usi message: {:?}", msg);
         }
@@ -188,7 +189,7 @@ impl Coordinator {
             _ => {}
         }
     }
-    fn process_state_ready(&mut self, msg: adp::Message) {
+    fn process_state_ready(&mut self, msg: &adp::Message) {
         match msg {
             Message::AdpG3LbpEvent(lbp_event) => {
                 if let Some(lbp_message) = lbp::adp_message_to_lbp_message(lbp_event) {

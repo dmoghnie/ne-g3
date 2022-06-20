@@ -1,6 +1,6 @@
 use std::sync::RwLock;
 
-use crate::{lbp_functions::{TEapPskKey, TEapPskNetworkAccessIdentifierS}, adp::TAdpBand};
+use crate::{lbp_functions::{TEapPskKey}, adp::TAdpBand};
 use config::Config;
 
 

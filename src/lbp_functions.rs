@@ -629,7 +629,7 @@ pub fn EAP_PSK_Decode_Message4(
     pMessage: &Vec<u8>,
     pPskContext: &TEapPskContext,
     pHeader: &Vec<u8>,
-    pRandS: &mut TEapPskRand,
+    p_rand_s: &mut TEapPskRand,
     pu32Nonce: &mut u32,
     pu8PChannelResult: &mut u8,
     pPChannelData: &mut Vec<u8>,
@@ -638,26 +638,26 @@ pub fn EAP_PSK_Decode_Message4(
 
     // TODO: review size (ARIB)
     if (pMessage.len() >= 41) {
-        *pRandS = pMessage[0..16].to_vec().into();
+        *p_rand_s = pMessage[0..16].to_vec().into();
 
         // decrypt P-CHANNEL
         // P-CHANNEL uses the TEK key
         let mut cipher = eax::Eax::<Aes128>::new(eax::aead::generic_array::GenericArray::from_slice(
             &pPskContext.m_Tek.0,
         ));
-        let pNonce = &pMessage[16..20]; 
+        let p_nonce = &pMessage[16..20]; 
         let tag = &pMessage[20..36];       
         let protected_data = &pMessage[36..];
-        let mut au8Nonce = [0u8; 16];
-        au8Nonce[12] = pNonce[0];
-        au8Nonce[13] = pNonce[1];
-        au8Nonce[14] = pNonce[2];
-        au8Nonce[15] = pNonce[3];
+        let mut au8_nonce = [0u8; 16];
+        au8_nonce[12] = p_nonce[0];
+        au8_nonce[13] = p_nonce[1];
+        au8_nonce[14] = p_nonce[2];
+        au8_nonce[15] = p_nonce[3];
         let mut header = pHeader[0..22].to_vec(); //TODO, is this fixed?
         header[0] >>= 2;
 
         log::trace!("TEK : {:?}", pPskContext.m_Tek);
-        log::trace!("Nonce/IV : {:X?}", au8Nonce);
+        log::trace!("Nonce/IV : {:X?}", au8_nonce);
         log::trace!("Header : {:X?}", header);
         log::trace!("Data-enc : {:X?}", protected_data);
         log::trace!("Tag : {:X?}", tag);
@@ -667,7 +667,7 @@ pub fn EAP_PSK_Decode_Message4(
         data_and_tag.append(tag.to_vec().borrow_mut());
 
         if let Ok(data) = cipher.decrypt(
-            eax::aead::generic_array::GenericArray::from_slice(&au8Nonce),
+            eax::aead::generic_array::GenericArray::from_slice(&au8_nonce),
             eax::aead::Payload {
                 msg: &data_and_tag,
                 aad: &header,
@@ -675,7 +675,7 @@ pub fn EAP_PSK_Decode_Message4(
         ) {
             *pu8PChannelResult = (data[0] & 0xC0) >> 6;
             *pPChannelData = data[1..].to_vec();
-            *pu32Nonce = u32::from_be_bytes([pNonce[3], pNonce[2], pNonce[1], pNonce[0]]);
+            *pu32Nonce = u32::from_be_bytes([p_nonce[3], p_nonce[2], p_nonce[1], p_nonce[0]]);
             bRet = true;
         }
     }

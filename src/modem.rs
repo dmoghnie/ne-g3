@@ -165,6 +165,9 @@ impl Modem {
                     log::warn!("Received a message in an invalid state");
                 }
             }
+            self.net_tx.send(msg);
+        } else {
+            log::warn!("Failed to parse usi message: {:?}", msg);
         }
     }
 

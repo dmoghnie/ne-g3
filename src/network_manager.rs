@@ -1,107 +1,160 @@
 use std::{
+    collections::HashMap,
     intrinsics::transmute,
     net::{Ipv4Addr, Ipv6Addr},
-    thread, vec, sync::{atomic::AtomicBool, Arc}, collections::HashMap,
+    sync::{atomic::AtomicBool, Arc},
+    thread, vec, io::Error,
 };
 
 use bytes::BytesMut;
 
 use config::Config;
 
-use packet::{builder::Builder, icmp, ip, Packet};
+use packet::{icmp, ip, Packet, ether, buffer, Builder, AsPacket};
+use packet::buffer::Buffer;
+
 
 use futures::{SinkExt, StreamExt};
-use tokio::time::{self, Duration};
+use tokio::{time::{self, Duration}, pin, sync::mpsc};
 
-use tun::platform::posix;
+use std::sync::atomic::Ordering;
 use tun::{self, AsyncDevice, Configuration, TunPacket, TunPacketCodec};
-use std::sync::atomic::{Ordering};
 
 use crate::{
     adp::{self, EAdpStatus},
-    usi,
+    usi, request::AdpDataRequest,
 };
 
-enum TunMessage {
+#[derive(Debug)]
+enum TunPayload {
     Data(TunPacket),
     Stop,
     Error(tun::Error),
 }
 
+#[derive(Debug)]
+struct TunMessage {
+    short_addr: u16,
+    payload: TunPayload,
+}
+
+impl TunMessage {
+    pub fn new(short_addr: u16, payload: TunPayload) -> Self {
+        TunMessage {
+            short_addr,
+            payload,
+        }
+    }
+    pub fn get_payload(self) -> TunPayload {
+        self.payload
+    }
+    pub fn get_short_addr(self) -> u16 {
+        self.short_addr
+    }
+}
+
 struct TunDevice {
-    listener: flume::Sender<TunMessage>,
+    short_addr: u16,
+    listener: mpsc::UnboundedSender<TunMessage>,
     device: Option<AsyncDevice>,
 }
 
 impl TunDevice {
-    pub fn new(listener: flume::Sender<TunMessage>) -> Self {
+    pub fn new(short_addr: u16, listener: mpsc::UnboundedSender<TunMessage>) -> Self {
         TunDevice {
+            short_addr,
             listener,
             device: None,
         }
     }
 
-    pub async fn start_async(self, config: Configuration, source: flume::Sender<TunMessage>) -> flume::Sender<TunMessage> {
+    pub async fn start_async(
+        self,
+        config: Configuration        
+    ) -> mpsc::UnboundedSender<TunMessage> {
         let dev = tun::create_as_async(&config).unwrap();
-        let (tx, rx) = flume::unbounded::<TunMessage>();
+        let (tx, mut rx) = mpsc::unbounded_channel::<TunMessage>();
         let (mut writer, mut reader) = dev.into_framed().split();
+        log::trace!("Start async ... for {:?}", config);
         // let mut running = AtomicBool::new(true);
-        let running = Arc::new(AtomicBool::new(false)); 
+        let running = Arc::new(AtomicBool::new(true));
         let should_run = running.clone();
-        tokio::spawn(async move {
+        let result = tokio::spawn(async move {
             loop {
-                match tokio::time::timeout(Duration::from_millis(1000), reader.next()).await {
+                // log::trace!("start_async read next ....");
+                match tokio::time::timeout(Duration::from_millis(5000), reader.next()).await {
                     Ok(packet) => {
+                        log::trace!("Tun reader received packet {:?}", packet);
                         if let Some(pkt) = packet {
                             match pkt {
                                 Ok(packet) => {
-                                    source.send(TunMessage::Data(packet)); //TODO check the result
-                                },
+                                    
+                                    self.listener.send(TunMessage::new(
+                                        self.short_addr,
+                                        TunPayload::Data(packet),
+                                    )); //TODO check the result
+                                }
                                 Err(e) => {
                                     log::warn!("TunDevice error reading {}", e);
-                                    source.send(TunMessage::Error(tun::Error::Io(e)));
-                                },
+                                    self.listener.send(TunMessage::new(
+                                        self.short_addr,
+                                        TunPayload::Error(tun::Error::Io(e)),
+                                    ));
+                                }
                             }
                         }
                     }
                     Err(e) => {
+                        // log::trace!("tun device read timeout");
                         if !running.load(Ordering::SeqCst) {
+                            log::trace!("Breaking from tun reader");
                             break;
                         }
                     }
                 }
             }
         });
-
+        // .await;
+        // match result {
+        //     Ok(_) => {},
+        //     Err(e) => {
+        //         log::warn!("Failed to await {}", e);
+        //     },
+        // }
         
         tokio::spawn(async move {
+            log::trace!("spawning packet writer");
             loop {
-                match rx.recv_async().await {
-                    Ok(msg) => {
-                        match msg {
-                            TunMessage::Data(packet) => {
-                                writer.send(packet);
-                            },
-                            TunMessage::Stop => {
+                match rx.recv().await {
+                    Some(msg) => {
+                        match msg.get_payload() {
+                            TunPayload::Data(packet) => {
+                                writer.send(packet).await;
+                            }
+                            TunPayload::Stop => {
+                                //Remove from device list ??
                                 should_run.store(false, Ordering::SeqCst);
-                                break                                
-                            },
-                            TunMessage::Error(_) => {},
-                        }                        
+                                break;
+                            }
+                            TunPayload::Error(_) => {} //TODO check error
+                        }
                     }
-                    Err(e) => {
-                        log::warn!("Failed to send packet {:?}", e);
-                    }
+                    None => {
+                        // log::warn!("writer : Failed to receive network message");
+                    },                    
                 }
             }
         });
+        // .await;
+        log::trace!("start async end ...");
         tx
     }
 }
 
 pub struct NetworkManager {
+    pan_id: u16,
     cmd_tx: flume::Sender<usi::Message>,
-    tun_devices: HashMap<u16, flume::Sender<TunMessage>>
+    tun_devices: HashMap<u16, mpsc::UnboundedSender::<TunMessage>>,
 }
 /*
 By design, the G3-PLC protocol stack allows native support of the IPv6 protocol, which grants end-user flexibility to fulfil business requirements when choosing the appropriate higher layers (ISO/OSI transport and application layers). This key feature also secures G3-PLC infrastructures in the long term, thanks to the scalability and future application compatibility provided by IPv6.
@@ -119,19 +172,78 @@ fe80:0000:0000:0000 (hexadecimal representation)
 
 */
 impl NetworkManager {
-    pub fn new(cmd_tx: flume::Sender<usi::Message>) -> Self {
-        NetworkManager { cmd_tx: cmd_tx, tun_devices: HashMap::new()}
+    pub fn new(pan_id: u16, cmd_tx: flume::Sender<usi::Message>) -> Self {
+        NetworkManager {
+            pan_id,
+            cmd_tx: cmd_tx,
+            tun_devices: HashMap::new(),
+        }
     }
     pub fn ipv4_from_short_addr(short_addr: u16) -> Ipv4Addr {
-        let b = short_addr.to_be_bytes();
+        let s = short_addr + 1;
+        let b = s.to_be_bytes();
         Ipv4Addr::new(10u8, 0u8, b[0], b[1])
+    }
+    pub fn short_addr_from_ipv4 (ipv4: &Ipv4Addr) -> u16 {
+        let o = ipv4.octets();        
+        let s = ((o[2] as u16) << 8) | (o[3] as u16);
+        s - 1
     }
     pub fn ipv6_from_short_addr(pan_id: u16, short_addr: u16) -> Ipv6Addr {
         Ipv6Addr::new(0xfe80, 0x0, 0x0, 0x0, pan_id, 0x00ff, 0xfe00, short_addr)
     }
+    pub fn ipv6_addr_from_ipv4_addr(pan_id: u16, ipv4: &Ipv4Addr) -> Ipv6Addr {
+        Self::ipv6_from_short_addr(pan_id, Self::short_addr_from_ipv4(ipv4))        
+    }
+    pub fn ipv4_addr_from_ipv6(ipv6_addr: Ipv6Addr) -> Ipv4Addr {
+        let (pan_id, short_addr) = Self::pan_id_and_short_addr_from_ipv6(&ipv6_addr);
+        Self::ipv4_from_short_addr(short_addr)
+    }
     pub fn pan_id_and_short_addr_from_ipv6(ipv6: &Ipv6Addr) -> (u16, u16) {
         let segments = ipv6.segments();
         (segments[4], segments[7])
+    }
+    pub fn dscp_ecn_to_traffic_class (dscp: u8, ecn: u8) -> u8 {
+        /*
+        Traffic Class (8-bits): These 8 bits are divided into two parts. The most significant 6 bits are used for Type of Service to 
+        let the Router Known what services should be provided to this packet. The least significant 2 bits are used for 
+        Explicit Congestion Notification (ECN).
+         */
+        dscp << 2 | (ecn & 0b1111_1100)
+    }
+    pub fn traffic_class_to_dscp_ecn(traffic_class: u8) -> (u8, u8) {
+        (traffic_class >> 2, traffic_class & 0b0000_0011)
+    }
+    
+    pub fn ipv6_from_ipv4 (pan_id: u16, ipv4_pkt: ip::v4::Packet<&[u8]>) -> Result<Vec<u8>, packet::Error> {
+        let dst = Self::ipv6_addr_from_ipv4_addr(pan_id,&ipv4_pkt.destination());
+        let src = Self::ipv6_addr_from_ipv4_addr(pan_id, &ipv4_pkt.source());
+        let v = ip::v6::Builder::default()
+            .traffic_class(Self::dscp_ecn_to_traffic_class(ipv4_pkt.dscp(), ipv4_pkt.ecn()))?
+            .flow_label(0)?//TODO, 
+            .payload_length(ipv4_pkt.payload().len() as u16)?
+            .next_header(0)?
+            .hop_limit(ipv4_pkt.ttl())?
+            .source(src)?
+            .destination(dst)?
+            .payload(ipv4_pkt.payload())?
+            .build()?;
+
+
+        Ok(v)
+
+    }
+    pub fn ipv4_from_ipv6 (ipv6_pkt: ip::v6::Packet<Vec<u8>>) -> Result<Vec<u8>, packet::Error> {
+        let dst = Self::ipv4_addr_from_ipv6(ipv6_pkt.destination());
+        let src = Self::ipv4_addr_from_ipv6(ipv6_pkt.source());
+        let (dscp, ecn) = Self::traffic_class_to_dscp_ecn(ipv6_pkt.traffic_class());
+        let payload = ipv6_pkt.payload();
+        log::trace!("ipv4_from_ipv6 payload : {:?}", payload);
+        let v = ip::v4::Builder::default().dscp(dscp)?.ecn(ecn)?
+            .source(src)?.destination(dst)?
+            .ttl(ipv6_pkt.hop_limit())?.protocol(ip::Protocol::Ipv4)?.payload(payload)?.build()?;
+        
+        Ok(v)
     }
     pub fn CONF_CONTEXT_INFORMATION_TABLE_0(pan_id: u16) -> [u8; 14] {
         let mut v = [
@@ -142,53 +254,145 @@ impl NetworkManager {
         v[13] = b[1];
         v
     }
-    pub fn process_adp_message(&mut self, msg: adp::Message) {
-        match msg {
-            adp::Message::AdpG3DataEvent(packet) => {}
-            adp::Message::AdpG3NetworkStartResponse(network_start_response) => {
-                if network_start_response.status == EAdpStatus::G3_SUCCESS {
-                    self.start_tun(0);
-                }
-            }
-            adp::Message::AdpG3NetworkJoinResponse(network_join_response) => {
-                if network_join_response.status == EAdpStatus::G3_SUCCESS {
-                    self.start_tun(network_join_response.network_addr);
-                }
-            }
-            _ => {}
-        }
-    }
-    fn start_tun(&mut self, short_addr: u16) -> Option<(posix::Reader, posix::Writer)> {
+
+    pub fn config_from_short_addr (short_addr: u16) -> Configuration {
         let ipv4 = Self::ipv4_from_short_addr(short_addr);
         let mut config = tun::Configuration::default();
 
         config.address(&ipv4).netmask((255, 255, 0, 0)).up();
-        tun::create(&config).map_or(None, |v| Some(v.split()))
+        config
     }
 
-    pub fn start(mut self) -> flume::Sender<adp::Message> {
+    // fn start_tun(&mut self, short_addr: u16) -> Option<(posix::Reader, posix::Writer)> {
+    //     let ipv4 = Self::ipv4_from_short_addr(short_addr);
+    //     let mut config = tun::Configuration::default();
+
+    //     config.address(&ipv4).netmask((255, 255, 0, 0)).up();
+    //     tun::create(&config).map_or(None, |v| Some(v.split()))
+    // }
+
+    pub async fn start(mut self) -> flume::Sender<adp::Message> {
+        log::trace!("network manager starting ...");
         let (tx, rx) = flume::unbounded::<adp::Message>();
-        thread::spawn(move || loop {
-            match rx.recv() {
-                Ok(msg) => {
-                    match msg {
-                        adp::Message::AdpG3DataEvent(packet) => {}
-                        adp::Message::AdpG3NetworkStartResponse(network_start_response) => {
-                            if network_start_response.status == EAdpStatus::G3_SUCCESS {
-                                self.start_tun(0);
+        let (tun_tx, mut tun_rx) = mpsc::unbounded_channel::<TunMessage>();
+        tokio::spawn(async move {
+            log::trace!("network manager starting adp receiver ...");
+            loop {
+                match rx.recv() {
+                    Ok(msg) => {
+                        log::trace!("NetworkManager received message : {:?}", msg);
+                        match msg {
+                            adp::Message::AdpG3DataEvent(g3_data) => {
+                                match ip::v6::Packet::new(g3_data.nsdu) {
+                                    Ok(pkt) => {
+                                        log::trace!("Received ipv6 packet from G3 {:?} - payload : {:?}", pkt, pkt.payload());
+                                        match Self::ipv4_from_ipv6(pkt) {
+                                            Ok(ipv4_pkt) => {
+                                                log::trace!("sending ipv4 packet : {:?} ", ipv4_pkt);                                                
+                                                //TODO optimize (to_vec ??)
+                                                //Send real short address
+                                                match tun_tx.send(TunMessage { short_addr: 0, 
+                                                    payload: TunPayload::Data(TunPacket::new(ipv4_pkt)) }){
+                                                        Ok(_) => {},
+                                                        Err(e) => {log::warn!("Failed to send ipv4 packet to TUN : {}", e)},
+                                                    }
+                                            },
+                                            Err(e) => {log::warn!("Failed to transform ipv6 packet into ipv4")},
+                                        }
+                                    },
+                                    Err(e) => {
+                                        log::warn!("Failed to receive ipv6 packet from G3");
+                                    },
+                                }
+                                
                             }
-                        }
-                        adp::Message::AdpG3NetworkJoinResponse(network_join_response) => {
-                            if network_join_response.status == EAdpStatus::G3_SUCCESS {
-                                self.start_tun(network_join_response.network_addr);
+                            adp::Message::AdpG3NetworkStartResponse(network_start_response) => {                                
+                                if network_start_response.status == EAdpStatus::G3_SUCCESS {
+                                    let short_addr = 0u16; //TODO, get the actual address from configuration
+                                    log::trace!("received network start response, starting interface for address {}", short_addr);
+                                    if self.tun_devices.contains_key(&short_addr) {
+                                        log::warn!(
+                                            "Received network start for device already started"
+                                        );
+                                    } else {                                        
+                                        let tun_device = TunDevice::new(short_addr, tun_tx.clone());                                       
+                                        self.tun_devices.insert(
+                                            short_addr,
+                                            tun_device.start_async(Self::config_from_short_addr(short_addr)).await
+                                        );
+                                    }
+                                }
                             }
+                            adp::Message::AdpG3NetworkJoinResponse(network_join_response) => {
+                                if network_join_response.status == EAdpStatus::G3_SUCCESS {
+                                    let short_addr = network_join_response.network_addr;
+                                    if self.tun_devices.contains_key(&network_join_response.network_addr) {
+                                        log::warn!("Received network join response for address : {}, while device already in list", short_addr);        
+                                    }
+                                    else{                                        
+                                        let tun_device = TunDevice::new(short_addr, tun_tx.clone());
+                                        self.tun_devices.insert(
+                                            short_addr,
+                                            tun_device.start_async(Self::config_from_short_addr(short_addr)).await
+                                        );
+                                    }
+                                    
+                                }
+                            }
+                            _ => {}
                         }
-                        _ => {}
                     }
-                },
-                Err(e) => {
-                    log::warn!("Network manager failed to receive message {}", e);
-                },
+                    Err(e) => {
+                        log::warn!("Network manager failed to receive message {}", e);
+                    }
+                }
+            }
+        });
+
+        tokio::spawn(async move {
+            loop {
+                match tun_rx.recv().await {
+                    Some(msg) => {
+                        match msg.payload {
+                            TunPayload::Data(pkt) => {
+                                
+                                match ip::Packet::new(pkt.get_bytes()) {
+                                    Ok(pkt) => {
+                                        match pkt {
+                                            ip::Packet::V4(ipv4_pkt) => {
+                                                log::trace!("Recevied ipv4 packet from device ... {:?}", ipv4_pkt);
+                                                match Self::ipv6_from_ipv4(self.pan_id, ipv4_pkt) {
+                                                    Ok(ipv6_pkt) => {
+                                                        let data_request = AdpDataRequest::new(0, &ipv6_pkt, true, 100);
+                                                        self.cmd_tx.send(usi::Message::UsiOut(data_request.into()));
+                                                    },
+                                                    Err(e) => {
+                                                        log::warn!("Failed to convert ipv6 packet to ipv4 packet : {}", e);
+                                                    },
+                                                }                                                
+                                                
+                                            },
+                                            ip::Packet::V6(_) => {
+                                                log::warn!("Received ipv6 on utun, not implemented yet");
+                                            },
+                                        }
+                                    },
+                                    Err(e) => {log::warn!("failed o transform tun message into packet : {}", e)},
+                                }
+                                
+                                //TODO transform packet to ipv6 and send it to the G3 network
+                            }
+                            TunPayload::Stop => { //Should we use this as a notification that the device is stopped or should we have a separate message
+                            }
+                            TunPayload::Error(e) => {
+                                log::trace!("Received error from device {}", e);
+                            }
+                        }
+                    }
+                    None => {
+                        log::warn!("Failed to receive tun message from device");
+                    }
+                }
             }
         });
         tx

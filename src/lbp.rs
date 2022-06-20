@@ -183,7 +183,7 @@ A_LBD: 8 bytes: Indicates the EUI-64 address of the bootstrapping device (LBD).
 
 pub const LBP_MESSAGE_MIN_LEN:usize = adp::ADP_ADDRESS_64BITS + 2usize; // is the sum of both T and Code
 
-pub fn adp_message_to_lbp_message(msg: adp::AdpG3LbpEvent) -> Option<LbpMessage> {
+pub fn adp_message_to_lbp_message(msg: &adp::AdpG3LbpEvent) -> Option<LbpMessage> {
     // u8MessageType = ((pNsdu[0] & 0xF0) >> 4);
     if &msg.nsdu.len() < &LBP_MESSAGE_MIN_LEN {
         return None;

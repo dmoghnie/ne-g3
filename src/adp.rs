@@ -9,21 +9,21 @@ pub const G3_SERIAL_MSG_STATUS: u8 = 0;
 /* COORDINATOR ACCESS */
 pub const G3_SERIAL_MSG_COORD_REQUEST_MESSAGES_BEGIN: u8 = 1;
 
-pub const G3_SERIAL_MSG_COORD_INITIALIZE: u8 = (G3_SERIAL_MSG_COORD_REQUEST_MESSAGES_BEGIN);
-pub const G3_SERIAL_MSG_COORD_SET_REQUEST: u8 = (G3_SERIAL_MSG_COORD_REQUEST_MESSAGES_BEGIN + 1);
-pub const G3_SERIAL_MSG_COORD_GET_REQUEST: u8 = (G3_SERIAL_MSG_COORD_REQUEST_MESSAGES_BEGIN + 2);
-pub const G3_SERIAL_MSG_COORD_KICK_REQUEST: u8 = (G3_SERIAL_MSG_COORD_REQUEST_MESSAGES_BEGIN + 3);
+pub const G3_SERIAL_MSG_COORD_INITIALIZE: u8 = G3_SERIAL_MSG_COORD_REQUEST_MESSAGES_BEGIN;
+pub const G3_SERIAL_MSG_COORD_SET_REQUEST: u8 = G3_SERIAL_MSG_COORD_REQUEST_MESSAGES_BEGIN + 1;
+pub const G3_SERIAL_MSG_COORD_GET_REQUEST: u8 = G3_SERIAL_MSG_COORD_REQUEST_MESSAGES_BEGIN + 2;
+pub const G3_SERIAL_MSG_COORD_KICK_REQUEST: u8 = G3_SERIAL_MSG_COORD_REQUEST_MESSAGES_BEGIN + 3;
 pub const G3_SERIAL_MSG_COORD_REKEYING_REQUEST: u8 =
-    (G3_SERIAL_MSG_COORD_REQUEST_MESSAGES_BEGIN + 4);
+    G3_SERIAL_MSG_COORD_REQUEST_MESSAGES_BEGIN + 4;
 
 pub const G3_SERIAL_MSG_COORD_CONF_IND_MESSAGES_BEGIN: u8 =
-    (G3_SERIAL_MSG_COORD_REQUEST_MESSAGES_BEGIN + 5);
-pub const G3_SERIAL_MSG_COORD_SET_CONFIRM: u8 = (G3_SERIAL_MSG_COORD_CONF_IND_MESSAGES_BEGIN);
-pub const G3_SERIAL_MSG_COORD_GET_CONFIRM: u8 = (G3_SERIAL_MSG_COORD_CONF_IND_MESSAGES_BEGIN + 1);
+    G3_SERIAL_MSG_COORD_REQUEST_MESSAGES_BEGIN + 5;
+pub const G3_SERIAL_MSG_COORD_SET_CONFIRM: u8 = G3_SERIAL_MSG_COORD_CONF_IND_MESSAGES_BEGIN;
+pub const G3_SERIAL_MSG_COORD_GET_CONFIRM: u8 = G3_SERIAL_MSG_COORD_CONF_IND_MESSAGES_BEGIN + 1;
 pub const G3_SERIAL_MSG_COORD_JOIN_INDICATION: u8 =
-    (G3_SERIAL_MSG_COORD_CONF_IND_MESSAGES_BEGIN + 2);
+    G3_SERIAL_MSG_COORD_CONF_IND_MESSAGES_BEGIN + 2;
 pub const G3_SERIAL_MSG_COORD_LEAVE_INDICATION: u8 =
-    (G3_SERIAL_MSG_COORD_CONF_IND_MESSAGES_BEGIN + 3);
+    G3_SERIAL_MSG_COORD_CONF_IND_MESSAGES_BEGIN + 3;
 
 pub const G3_SERIAL_MSG_COORD_REQUEST_MESSAGES_END: u8 = (G3_SERIAL_MSG_COORD_LEAVE_INDICATION);
 
@@ -533,6 +533,14 @@ pub fn usi_message_to_message(msg: &InMessage) -> Option<Message> {
                         log::warn!("Failed to parse network status indication");
                     }
                 }
+                G3_SERIAL_MSG_ADP_DATA_INDICATION => {
+                    if let Some(data_indication) = AdpG3DataEvent::try_from_message(&msg){
+                        return Some(Message::AdpG3DataEvent(data_indication));
+                    }
+                    else{
+                        log::warn!("Failed to parse data indication");
+                    }
+                }
                 G3_SERIAL_MSG_MAC_DATA_INDICATION => {
                     // let let Some(data_event) = AdpG3DataEvent::try_from_message
                     log::warn!("Data indication ")
@@ -972,7 +980,7 @@ impl AdpG3SetResponse {
                         | (msg.buf[3] as u32) << 16
                         | (msg.buf[4] as u32) << 8
                         | (msg.buf[5] as u32),
-                    attribute_idx: (msg.buf[6] as u16) << 8 | (msg.buf[7] as u16),
+                    attribute_idx: ((msg.buf[6] as u16) << 8) | (msg.buf[7] as u16),
                 });
             }
         }
@@ -1162,8 +1170,23 @@ impl fmt::Debug for AdpG3DataResponse {
     }
 }
 
+const DATA_EVENT_MIN_LEN: usize = 3;
+
 #[derive(Debug)]
 pub struct AdpG3DataEvent {
-    nsdu: Vec<u8>,
-    link_quality_indicator: u8,
+    pub nsdu: Vec<u8>,
+    pub link_quality_indicator: u8,
+}
+
+impl AdpG3DataEvent {
+    pub fn try_from_message(msg: &usi::InMessage) -> Option<AdpG3DataEvent> {
+        if msg.buf.len() >= DATA_EVENT_MIN_LEN + 1 {
+            //Add one byte for cmd
+            let link_indicator = msg.buf[1];
+            
+                let size = (msg.buf[2] as u16) << 8 | (msg.buf[3] as u16);
+                return Some(AdpG3DataEvent {nsdu: msg.buf[4..(4+size) as usize].to_vec(), link_quality_indicator: link_indicator });
+        }
+        None
+    }
 }
