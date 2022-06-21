@@ -132,7 +132,7 @@ impl TunDevice {
                         log::trace!("Tun writer, writing packet : {:?}", msg);
                         match msg.get_payload() {
                             TunPayload::Data(packet) => {
-                                writer.send(packet).await;
+                                writer.send(TunPacket::new(packet.get_bytes().to_vec())).await;
                             }
                             TunPayload::Stop => {
                                 //Remove from device list ??
