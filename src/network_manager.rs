@@ -245,9 +245,9 @@ impl NetworkManager {
         let src = Self::ipv4_addr_from_ipv6(ipv6_pkt.source());
         let (dscp, ecn) = Self::traffic_class_to_dscp_ecn(ipv6_pkt.traffic_class());
 
-        let payload = ipv6_pkt.payload().to_vec();
-        let f_payload = &payload[..(payload.len() - 4usize)];
-        log::trace!("ipv4_from_ipv6 payload : {:?}", f_payload);
+        // let payload = ipv6_pkt.payload().to_vec();
+        // let f_payload = &payload[..(payload.len() - 4usize)];
+        // log::trace!("ipv4_from_ipv6 payload : {:?}", f_payload);
         /*
         .id(0x2d87).unwrap()
 			.ttl(64).unwrap()
@@ -260,13 +260,31 @@ impl NetworkManager {
 					.payload(b"test").unwrap()
 					.build().unwrap();
         */
-
         
-        let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
+        if ipv6_pkt.payload_length() < 8 {
+            return Err(packet::Error::InvalidPacket);
+        }
+
+        let mut payload = ipv6_pkt.payload();
+        
+        let udp_src_port = ((payload[0] as u16) << 8) | (payload[1] as u16);
+        let udp_dst_port = ((payload[2] as u16) << 8) | (payload[3] as u16);
+        let udp_length = ((payload[4] as u16) << 8) | (payload[5] as u16);
+        let udp_checksum = ((payload[6] as u16) << 8) | (payload[7] as u16);
+
+        if (udp_length == 0) {
+            return Err(packet::Error::InvalidPacket);
+        }
+
+        payload.advance(8);
+        if let Some(payload_f) = payload.chunk().get(0..(payload.len() - 4)){
+            let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
             .source(src)?.destination(dst)?
-            .ttl(ipv6_pkt.hop_limit())?.udp()?.payload(f_payload)?.build()?;
-            
-        ip::v4::Packet::new(v)
+            .ttl(ipv6_pkt.hop_limit())?.udp()?.source(udp_src_port)?.destination(udp_dst_port)?.payload(payload_f)?.build()?;
+            return ip::v4::Packet::new(v);
+
+        }        
+        Err(packet::Error::InvalidPacket)
     }
     pub fn CONF_CONTEXT_INFORMATION_TABLE_0(pan_id: u16) -> [u8; 14] {
         let mut v = [
@@ -307,7 +325,7 @@ impl NetworkManager {
                     Ok(msg) => {
                         log::trace!("NetworkManager received message : {:?}", msg);
                         match msg {
-                            adp::Message::AdpG3DataEvent(g3_data) => {
+                            adp::Message::AdpG3DataEvent(g3_data) => {                                
                                 match ip::v6::Packet::new(g3_data.nsdu) {
                                     Ok(pkt) => {
                                         log::trace!("Received ipv6 packet from G3 {:?} - payload : {:?}", pkt, pkt.payload()); 
