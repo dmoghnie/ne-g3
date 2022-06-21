@@ -266,12 +266,11 @@ impl AdpDataRequest {
 
 impl Into<usi::OutMessage> for AdpDataRequest {
     
-    fn into(self) -> usi::OutMessage {
-        let data_len = self.data.len().to_be_bytes();
+    fn into(self) -> usi::OutMessage {        
         let mut v = vec![adp::G3_SERIAL_MSG_ADP_DATA_REQUEST, self.handle, 
             self.discover_route as u8, self.quality_of_service,
-            data_len[0],
-            data_len[1]];
+            (self.data.len() >> 8) as u8,
+            (self.data.len() & 0xFF) as u8];
        for ch in self.data {
            v.push(ch);
        }
