@@ -277,7 +277,7 @@ impl NetworkManager {
         }
 
         payload.advance(8);
-        if let Some(payload_f) = payload.chunk().get(0..(payload.len() - 4)){
+        if let Some(payload_f) = payload.chunk().get(0..(udp_length as usize)){ // ipv6 over g3 is rounded to 8 bytes, we use the udp length
             let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
             .source(src)?.destination(dst)?
             .ttl(ipv6_pkt.hop_limit())?.udp()?.source(udp_src_port)?.destination(udp_dst_port)?.payload(payload_f)?.build()?;
