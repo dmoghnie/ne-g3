@@ -6,7 +6,7 @@ use std::{
     thread, vec, io::Error,
 };
 
-use bytes::BytesMut;
+use bytes::{BytesMut, Buf};
 
 use config::Config;
 
@@ -245,8 +245,9 @@ impl NetworkManager {
         let src = Self::ipv4_addr_from_ipv6(ipv6_pkt.source());
         let (dscp, ecn) = Self::traffic_class_to_dscp_ecn(ipv6_pkt.traffic_class());
 
-        let payload = ipv6_pkt.payload();
-        log::trace!("ipv4_from_ipv6 payload : {:?}", payload);
+        let payload = ipv6_pkt.payload().to_vec();
+        let f_payload = &payload[..(payload.len() - 4usize)];
+        log::trace!("ipv4_from_ipv6 payload : {:?}", f_payload);
         /*
         .id(0x2d87).unwrap()
 			.ttl(64).unwrap()
@@ -263,7 +264,7 @@ impl NetworkManager {
         
         let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
             .source(src)?.destination(dst)?
-            .ttl(ipv6_pkt.hop_limit())?.udp()?.payload(payload)?.build()?;
+            .ttl(ipv6_pkt.hop_limit())?.udp()?.payload(f_payload)?.build()?;
             
         ip::v4::Packet::new(v)
     }
