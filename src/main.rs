@@ -88,14 +88,15 @@ fn main() {
         .unwrap()
         .block_on(async {
             let network_manager = network_manager::NetworkManager::new(s.g3.pan_id, usi_tx);
-            let net_tx = network_manager.start().await;
+            let (tx, rx) = flume::unbounded::<adp::Message>();
+            
             log::trace!("Network Manager started ...");
             let t2 = thread::spawn(move || {
                 let message_handler: Option<Box<dyn MessageHandler>>;
                 if is_coordinator {
-                    message_handler = Some(Box::new(coord::Coordinator::new(cmd_tx, net_tx)));
+                    message_handler = Some(Box::new(coord::Coordinator::new(cmd_tx, tx)));
                 } else {
-                    message_handler = Some(Box::new(modem::Modem::new(cmd_tx, net_tx)));
+                    message_handler = Some(Box::new(modem::Modem::new(cmd_tx, tx)));
                 }
                 if let Some(mut handler) = message_handler {
                     loop {
@@ -117,7 +118,8 @@ fn main() {
                 system_tx.send(Message::HeartBeat(SystemTime::now()));
                 thread::sleep(TIMER_RESOLUTION);
             });
-            system_handle.join();
+           
+            network_manager.start(rx).await;
         });
         
     // system_handle.join().unwrap();

@@ -10,12 +10,13 @@ use bytes::BytesMut;
 
 use config::Config;
 
-use packet::{icmp, ip, Packet, ether, buffer, Builder, AsPacket};
+use packet::{icmp, ip, ether, buffer, Builder, AsPacket, Packet};
 use packet::buffer::Buffer;
+use futures::{stream::FuturesUnordered, StreamExt, future};
 
-
-use futures::{SinkExt, StreamExt};
-use tokio::{time::{self, Duration}, pin, sync::mpsc};
+use futures::{SinkExt, channel::mpsc::UnboundedReceiver};
+use tokio::{time::{self, Duration}, pin, sync::mpsc, task::JoinHandle};
+use tokio_util::codec::{Decoder, FramedRead};
 
 use std::sync::atomic::Ordering;
 use tun::{self, AsyncDevice, Configuration, TunPacket, TunPacketCodec};
@@ -68,20 +69,21 @@ impl TunDevice {
         }
     }
 
-    pub async fn start_async(
+    pub fn start_async(
         self,
-        config: Configuration        
-    ) -> mpsc::UnboundedSender<TunMessage> {
+        config: Configuration, mut rx: tokio::sync::mpsc::UnboundedReceiver<TunMessage>
+    ) {
+        
         let dev = tun::create_as_async(&config).unwrap();
-        let (tx, mut rx) = mpsc::unbounded_channel::<TunMessage>();
+    
         let (mut writer, mut reader) = dev.into_framed().split();
         log::trace!("Start async ... for {:?}", config);
         // let mut running = AtomicBool::new(true);
         let running = Arc::new(AtomicBool::new(true));
         let should_run = running.clone();
-        let result = tokio::spawn(async move {
-            loop {
-                // log::trace!("start_async read next ....");
+        let f1 = tokio::task::spawn(async move {
+            log::trace!("start_async read next ....");
+            loop {                
                 match tokio::time::timeout(Duration::from_millis(5000), reader.next()).await {
                     Ok(packet) => {
                         log::trace!("Tun reader received packet {:?}", packet);
@@ -91,7 +93,7 @@ impl TunDevice {
                                     
                                     self.listener.send(TunMessage::new(
                                         self.short_addr,
-                                        TunPayload::Data(packet),
+                                        TunPayload::Data(TunPacket::new(packet.get_bytes().to_vec())),
                                     )); //TODO check the result
                                 }
                                 Err(e) => {
@@ -105,7 +107,7 @@ impl TunDevice {
                         }
                     }
                     Err(e) => {
-                        // log::trace!("tun device read timeout");
+                        log::trace!("tun device read timeout");
                         if !running.load(Ordering::SeqCst) {
                             log::trace!("Breaking from tun reader");
                             break;
@@ -122,11 +124,12 @@ impl TunDevice {
         //     },
         // }
         
-        tokio::spawn(async move {
+        let f2 = tokio::task::spawn(async move {
             log::trace!("spawning packet writer");
             loop {
                 match rx.recv().await {
                     Some(msg) => {
+                        log::trace!("Tun writer, writing packet : {:?}", msg);
                         match msg.get_payload() {
                             TunPayload::Data(packet) => {
                                 writer.send(packet).await;
@@ -140,14 +143,18 @@ impl TunDevice {
                         }
                     }
                     None => {
-                        // log::warn!("writer : Failed to receive network message");
+                        log::warn!("writer : Failed to receive network message");
                     },                    
                 }
             }
         });
+        // match r {
+        //     Ok(_) => {},
+        //     Err(e) => {log::warn!("Failed to start packet writer : {}", e)},
+        // }
         // .await;
         log::trace!("start async end ...");
-        tx
+
     }
 }
 
@@ -233,17 +240,32 @@ impl NetworkManager {
         Ok(v)
 
     }
-    pub fn ipv4_from_ipv6 (ipv6_pkt: ip::v6::Packet<Vec<u8>>) -> Result<Vec<u8>, packet::Error> {
+    pub fn ipv4_from_ipv6 (ipv6_pkt: ip::v6::Packet<Vec<u8>>) -> Result<ip::v4::Packet<Vec<u8>>, packet::Error> {
         let dst = Self::ipv4_addr_from_ipv6(ipv6_pkt.destination());
         let src = Self::ipv4_addr_from_ipv6(ipv6_pkt.source());
         let (dscp, ecn) = Self::traffic_class_to_dscp_ecn(ipv6_pkt.traffic_class());
+
         let payload = ipv6_pkt.payload();
         log::trace!("ipv4_from_ipv6 payload : {:?}", payload);
-        let v = ip::v4::Builder::default().dscp(dscp)?.ecn(ecn)?
-            .source(src)?.destination(dst)?
-            .ttl(ipv6_pkt.hop_limit())?.protocol(ip::Protocol::Ipv4)?.payload(payload)?.build()?;
+        /*
+        .id(0x2d87).unwrap()
+			.ttl(64).unwrap()
+			.source("66.102.1.108".parse().unwrap()).unwrap()
+			.destination("192.168.0.79".parse().unwrap()).unwrap()
+			.icmp().unwrap()
+				.echo().unwrap().request().unwrap()
+					.identifier(42).unwrap()
+					.sequence(2).unwrap()
+					.payload(b"test").unwrap()
+					.build().unwrap();
+        */
+
         
-        Ok(v)
+        let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
+            .source(src)?.destination(dst)?
+            .ttl(ipv6_pkt.hop_limit())?.udp()?.payload(payload)?.build()?;
+            
+        ip::v4::Packet::new(v)
     }
     pub fn CONF_CONTEXT_INFORMATION_TABLE_0(pan_id: u16) -> [u8; 14] {
         let mut v = [
@@ -271,31 +293,35 @@ impl NetworkManager {
     //     tun::create(&config).map_or(None, |v| Some(v.split()))
     // }
 
-    pub async fn start(mut self) -> flume::Sender<adp::Message> {
+    pub async fn start(mut self, mut rx: flume::Receiver<adp::Message>) {
         log::trace!("network manager starting ...");
-        let (tx, rx) = flume::unbounded::<adp::Message>();
+        let mut futures:FuturesUnordered<JoinHandle<()>> = FuturesUnordered::new();
+
         let (tun_tx, mut tun_rx) = mpsc::unbounded_channel::<TunMessage>();
-        tokio::spawn(async move {
+        
+        let f1 = tokio::spawn(async move {
             log::trace!("network manager starting adp receiver ...");
             loop {
-                match rx.recv() {
+                match rx.recv_async().await {
                     Ok(msg) => {
                         log::trace!("NetworkManager received message : {:?}", msg);
                         match msg {
                             adp::Message::AdpG3DataEvent(g3_data) => {
                                 match ip::v6::Packet::new(g3_data.nsdu) {
                                     Ok(pkt) => {
-                                        log::trace!("Received ipv6 packet from G3 {:?} - payload : {:?}", pkt, pkt.payload());
+                                        log::trace!("Received ipv6 packet from G3 {:?} - payload : {:?}", pkt, pkt.payload()); 
+                                        let (_, short_addr_dst) = Self::pan_id_and_short_addr_from_ipv6(&pkt.destination());                                       
                                         match Self::ipv4_from_ipv6(pkt) {
-                                            Ok(ipv4_pkt) => {
-                                                log::trace!("sending ipv4 packet : {:?} ", ipv4_pkt);                                                
-                                                //TODO optimize (to_vec ??)
-                                                //Send real short address
-                                                match tun_tx.send(TunMessage { short_addr: 0, 
-                                                    payload: TunPayload::Data(TunPacket::new(ipv4_pkt)) }){
-                                                        Ok(_) => {},
-                                                        Err(e) => {log::warn!("Failed to send ipv4 packet to TUN : {}", e)},
-                                                    }
+                                            Ok(ipv4_pkt) => {                                                                                               
+                                                log::trace!("sending ipv4 packet : {:?} -> dst short address {}", ipv4_pkt, short_addr_dst); 
+                                                if let Some(tx) = self.tun_devices.get(&short_addr_dst) {
+                                                    log::trace!("found sender for short addr {} -- sending TunPayload::Data", short_addr_dst);
+                                                    match tx.send(TunMessage { short_addr: short_addr_dst, 
+                                                        payload: TunPayload::Data(TunPacket::new(ipv4_pkt.as_ref().to_vec())) }){
+                                                            Ok(_) => {},
+                                                            Err(e) => {log::warn!("Failed to send ipv4 packet to TUN : {}", e)},
+                                                        }
+                                                }
                                             },
                                             Err(e) => {log::warn!("Failed to transform ipv6 packet into ipv4")},
                                         }
@@ -315,11 +341,15 @@ impl NetworkManager {
                                             "Received network start for device already started"
                                         );
                                     } else {                                        
-                                        let tun_device = TunDevice::new(short_addr, tun_tx.clone());                                       
+                                        let tun_device = TunDevice::new(short_addr, tun_tx.clone());           
+                                        let (tx, mut rx) = mpsc::unbounded_channel::<TunMessage>();                            
                                         self.tun_devices.insert(
                                             short_addr,
-                                            tun_device.start_async(Self::config_from_short_addr(short_addr)).await
+                                            tx
                                         );
+                                        tun_device.start_async(Self::config_from_short_addr(short_addr), rx);
+                                        
+                                        
                                     }
                                 }
                             }
@@ -331,10 +361,14 @@ impl NetworkManager {
                                     }
                                     else{                                        
                                         let tun_device = TunDevice::new(short_addr, tun_tx.clone());
+                                        let (tx, mut rx) = mpsc::unbounded_channel::<TunMessage>();  
                                         self.tun_devices.insert(
                                             short_addr,
-                                            tun_device.start_async(Self::config_from_short_addr(short_addr)).await
+                                            tx
                                         );
+                                       
+                                        tun_device.start_async(Self::config_from_short_addr(short_addr), rx);
+                                        
                                     }
                                     
                                 }
@@ -343,13 +377,14 @@ impl NetworkManager {
                         }
                     }
                     Err(e) => {
-                        log::warn!("Network manager failed to receive message {}", e);
+                        log::warn!("Network manager failed to receive message : {}", e);
                     }
                 }
             }
         });
 
-        tokio::spawn(async move {
+        let f2 = tokio::spawn(async move {
+            log::trace!("Start Tun message processor ");
             loop {
                 match tun_rx.recv().await {
                     Some(msg) => {
@@ -395,6 +430,10 @@ impl NetworkManager {
                 }
             }
         });
-        tx
+        futures.push(f1);
+        futures.push(f2);
+        while let Some(f) = futures.next().await {
+            
+        }
     }
 }
