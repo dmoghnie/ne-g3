@@ -93,7 +93,7 @@ impl TunDevice {
                                     
                                     self.listener.send(TunMessage::new(
                                         self.short_addr,
-                                        TunPayload::Data(TunPacket::new(packet.get_bytes().to_vec())),
+                                        TunPayload::Data(packet),
                                     )); //TODO check the result
                                 }
                                 Err(e) => {
@@ -395,9 +395,10 @@ impl NetworkManager {
                                     Ok(pkt) => {
                                         match pkt {
                                             ip::Packet::V4(ipv4_pkt) => {
-                                                log::trace!("Recevied ipv4 packet from device ... {:?}", ipv4_pkt);
+                                                log::trace!("Received ipv4 packet from device ... {:?}", ipv4_pkt);
                                                 match Self::ipv6_from_ipv4(self.pan_id, ipv4_pkt) {
                                                     Ok(ipv6_pkt) => {
+                                                        log::trace!("Sending ipv6 packet to G3 {:?}", ipv4_pkt);
                                                         let data_request = AdpDataRequest::new(0, &ipv6_pkt, true, 100);
                                                         self.cmd_tx.send(usi::Message::UsiOut(data_request.into()));
                                                     },
