@@ -10,7 +10,7 @@ use bytes::{BytesMut, Buf};
 
 use config::Config;
 
-use packet::{icmp, ip, ether, buffer, Builder, AsPacket, Packet};
+use packet::{icmp, ip, ether, buffer, Builder, AsPacket, Packet, udp};
 use packet::buffer::Buffer;
 use futures::{stream::FuturesUnordered, StreamExt, future};
 
@@ -227,11 +227,12 @@ impl NetworkManager {
     pub fn ipv6_from_ipv4 (pan_id: u16, ipv4_pkt: ip::v4::Packet<&[u8]>) -> Result<Vec<u8>, packet::Error> {
         let dst = Self::ipv6_addr_from_ipv4_addr(pan_id,&ipv4_pkt.destination());
         let src = Self::ipv6_addr_from_ipv4_addr(pan_id, &ipv4_pkt.source());
+        
         let v = ip::v6::Builder::default()
             .traffic_class(Self::dscp_ecn_to_traffic_class(ipv4_pkt.dscp(), ipv4_pkt.ecn()))?
             .flow_label(0)?//TODO, 
             .payload_length(ipv4_pkt.payload().len() as u16)?
-            .next_header(17)?
+            .next_header(ipv4_pkt.protocol().into())?
             .hop_limit(ipv4_pkt.ttl())?
             .source(src)?
             .destination(dst)?
@@ -242,7 +243,7 @@ impl NetworkManager {
         Ok(v)
 
     }
-    pub fn ipv4_from_ipv6 (ipv6_pkt: ip::v6::Packet<Vec<u8>>) -> Result<ip::v4::Packet<Vec<u8>>, packet::Error> {
+    pub fn ipv4_from_ipv6 (ipv6_pkt: ip::v6::Packet<Vec<u8>>) -> Result<Vec<u8>, packet::Error> {
         let dst = Self::ipv4_addr_from_ipv6(ipv6_pkt.destination());
         let src = Self::ipv4_addr_from_ipv6(ipv6_pkt.source());
         let (dscp, ecn) = Self::traffic_class_to_dscp_ecn(ipv6_pkt.traffic_class());
@@ -263,29 +264,47 @@ impl NetworkManager {
 					.build().unwrap();
         */
         
-        if ipv6_pkt.payload_length() < 8 {
-            return Err(packet::Error::InvalidPacket);
-        }
+        // if ipv6_pkt.payload_length() < 8 {
+        //     return Err(packet::Error::InvalidPacket);
+        // }
 
-        let mut payload = ipv6_pkt.payload();
+        // let mut payload = ipv6_pkt.payload();
         
-        let udp_src_port = ((payload[0] as u16) << 8) | (payload[1] as u16);
-        let udp_dst_port = ((payload[2] as u16) << 8) | (payload[3] as u16);
-        let udp_length = ((payload[4] as u16) << 8) | (payload[5] as u16);
-        let udp_checksum = ((payload[6] as u16) << 8) | (payload[7] as u16);
+        // let udp_src_port = ((payload[0] as u16) << 8) | (payload[1] as u16);
+        // let udp_dst_port = ((payload[2] as u16) << 8) | (payload[3] as u16);
+        // let udp_length = ((payload[4] as u16) << 8) | (payload[5] as u16);
+        // let udp_checksum = ((payload[6] as u16) << 8) | (payload[7] as u16);
 
-        if (udp_length == 0) {
-            return Err(packet::Error::InvalidPacket);
-        }
+        // if (udp_length == 0) {
+        //     return Err(packet::Error::InvalidPacket);
+        // }
 
-        payload.advance(8);
-        if let Some(payload_f) = payload.chunk().get(0..(udp_length as usize - 8usize)){ // ipv6 over g3 is rounded to 8 bytes, we use the udp length minus the header
+        // payload.advance(8);
+        // if let Some(payload_f) = payload.chunk().get(0..(udp_length as usize - 8usize)){ // ipv6 over g3 is rounded to 8 bytes, we use the udp length minus the header
+        //     let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
+        //     .source(src)?.destination(dst)?
+        //     .ttl(ipv6_pkt.hop_limit())?.udp()?.source(udp_src_port)?.destination(udp_dst_port)?.payload(payload_f)?.build()?;
+        //     return ip::v4::Packet::new(v);
+
+        // }        
+        // Err(packet::Error::InvalidPacket)
+        
+        // let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
+        //     .source(src)?.destination(dst)?
+        //     .ttl(ipv6_pkt.hop_limit())?.payload(ipv6_pkt.payload())?.build()?;
+        // let ip = ip::Packet::new(v);
+        let udp = udp::Packet::new(ipv6_pkt.payload());
+        log::trace!("ipv4_from_ipv6 : udp - {:?}", udp);
+        if let Ok(udp) = udp {
+            let src_port = udp.source();
+            let dst_port = udp.destination();
+            
             let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
-            .source(src)?.destination(dst)?
-            .ttl(ipv6_pkt.hop_limit())?.udp()?.source(udp_src_port)?.destination(udp_dst_port)?.payload(payload_f)?.build()?;
-            return ip::v4::Packet::new(v);
-
-        }        
+                .source(src)?.destination(dst)?
+                .ttl(ipv6_pkt.hop_limit())?.udp()?.source(src_port)?.destination(dst_port)?.payload(udp.payload())?.build();
+            return v;
+        }
+        // Ok(udp?.as_ref().to_vec())
         Err(packet::Error::InvalidPacket)
     }
     pub fn CONF_CONTEXT_INFORMATION_TABLE_0(pan_id: u16) -> [u8; 14] {
@@ -338,7 +357,7 @@ impl NetworkManager {
                                                 if let Some(tx) = self.tun_devices.get(&short_addr_dst) {
                                                     log::trace!("found sender for short addr {} -- sending TunPayload::Data", short_addr_dst);
                                                     match tx.send(TunMessage { short_addr: short_addr_dst, 
-                                                        payload: TunPayload::Data(TunPacket::new(ipv4_pkt.as_ref().to_vec())) }){
+                                                        payload: TunPayload::Data(TunPacket::new(ipv4_pkt)) }){
                                                             Ok(_) => {},
                                                             Err(e) => {log::warn!("Failed to send ipv4 packet to TUN : {}", e)},
                                                         }
