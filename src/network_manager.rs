@@ -283,7 +283,7 @@ impl NetworkManager {
 
                 let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
                 .source(src)?.destination(dst)?
-                .ttl(ipv6_pkt.hop_limit())?.payload(ipv6_pkt.payload())?.build();
+                .ttl(ipv6_pkt.hop_limit())?.protocol(Protocol::Tcp)?.payload(ipv6_pkt.payload())?.build();
                 // .tcp()?.acknowledgment(tcp.acknowledgment())?.destination(tcp.destination())?
                 // .flags(tcp.flags())?.sequence(tcp.sequence())?.source(tcp.source())?
                 // .window(tcp.window())?.pointer(tcp.pointer())?.payload(tcp.payload())?.build();
