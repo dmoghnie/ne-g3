@@ -231,7 +231,7 @@ impl NetworkManager {
             .traffic_class(Self::dscp_ecn_to_traffic_class(ipv4_pkt.dscp(), ipv4_pkt.ecn()))?
             .flow_label(0)?//TODO, 
             .payload_length(ipv4_pkt.payload().len() as u16)?
-            .next_header(0)?
+            .next_header(17)?
             .hop_limit(ipv4_pkt.ttl())?
             .source(src)?
             .destination(dst)?
