@@ -188,7 +188,7 @@ impl InMessage {
                     self.buf.get(common::LEN_PROTOCOL_HI_OFFSET as usize),
                     self.buf.get(common::LEN_PROTOCOL_LO_OFFSET as usize),
                 ) {
-                    self.payload_len = common::get_protocol_len(*b1, *b2).into();
+                    self.payload_len = common::get_protocol_len(*b1 as u16, *b2 as u16).into();
                 }
             }
         }
@@ -206,12 +206,12 @@ impl InMessage {
                 | common::MNGP_PRIME_EN_PIBRSP => {
                     let crc_len = 4;
                     if let Some(tb) = self.buf.get(self.buf.len() - (crc_len)..) {
-                        let rxCrc: u32 = (tb[0] as u32) << 24
+                        let rx_crc: u32 = (tb[0] as u32) << 24
                             | (tb[1] as u32) << 16
                             | (tb[2] as u32) << 8
                             | tb[3] as u32;
                         if let Some(d) = self.buf.get(0..(self.payload_len + 2)) {
-                            return rxCrc == crc::evalCrc32(&d.to_vec());
+                            return rx_crc == crc::evalCrc32(&d.to_vec());
                         }
                     }
                 }
@@ -223,18 +223,18 @@ impl InMessage {
                 | common::PROTOCOL_PRIMEoUDP => {
                     let crc_len = 2;
                     if let Some(tb) = self.buf.get(self.buf.len() - (crc_len)..) {
-                        let rxCrc = (tb[0] as u16) << 8 | (tb[1] as u16);
+                        let rx_crc = (tb[0] as u16) << 8 | (tb[1] as u16);
                         if let Some(d) = self.buf.get(0..(self.payload_len + 2)) {
-                            return rxCrc == crc::evalCrc16(&d.to_vec());
+                            return rx_crc == crc::evalCrc16(&d.to_vec());
                         }
                     }
                 }
                 common::PROTOCOL_PRIME_API => {
                     let crc_len = 1;
                     if let Some(tb) = self.buf.get(self.buf.len() - (crc_len)..) {
-                        let rxCrc = tb[0];
+                        let rx_crc = tb[0];
                         if let Some(d) = self.buf.get(0..(self.payload_len as usize + 2)) {
-                            return rxCrc == crc::evalCrc8(&d.to_vec());
+                            return rx_crc == crc::evalCrc8(&d.to_vec());
                         }
                     }
                 }

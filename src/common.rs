@@ -68,8 +68,8 @@ pub const PROTOCOL_DELIMITER: u8 = 0x7e;
 pub const PROTOCOL_ESC: u8 = 0x7d;
 pub const PROTOCOL_MIN_LEN: u8 = 4;
 
-pub fn get_protocol_len(A: u8, B: u8) -> u16 {
-    return ((A << LEN_PROTOCOL_HI_SHIFT) + (B >> LEN_PROTOCOL_LO_SHIFT)) as u16;
+pub fn get_protocol_len(A: u16, B: u16) -> u16 {
+    return (A << LEN_PROTOCOL_HI_SHIFT) + (B >> LEN_PROTOCOL_LO_SHIFT);
 }
 pub fn get_protocol_xlen(A: u8, B: u8, C: u8) -> u16 {
     return ((A as u16) << LEN_PROTOCOL_HI_SHIFT)
