@@ -26,6 +26,8 @@ use crate::{
     usi, request::AdpDataRequest,
 };
 
+use rand::Rng;
+
 #[derive(Debug)]
 enum TunPayload {
     Data(TunPacket),
@@ -418,7 +420,7 @@ impl NetworkManager {
                                                 match Self::ipv6_from_ipv4(self.pan_id, ipv4_pkt) {
                                                     Ok(ipv6_pkt) => {
                                                         log::trace!("Sending ipv6 packet to G3 {:?}", ipv6_pkt);
-                                                        let data_request = AdpDataRequest::new(0, &ipv6_pkt, true, 100);
+                                                        let data_request = AdpDataRequest::new(rand::thread_rng().gen(), &ipv6_pkt, true, 100);
                                                         self.cmd_tx.send(usi::Message::UsiOut(data_request.into()));
                                                     },
                                                     Err(e) => {
