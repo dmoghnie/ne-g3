@@ -47,7 +47,7 @@ pub struct OutMessage {
 }
 
 impl OutMessage {
-    pub fn new(protocol: u8, data: &Vec<u8>) -> OutMessage {
+    pub fn new(protocol: u8, data: &[u8]) -> OutMessage {
         OutMessage {
             protocol: protocol,
             data: data.to_vec(),
@@ -282,7 +282,7 @@ impl InMessage {
                         if self.check_crc() {
                             self.rxState = RxState::RxDone;
                         } else {
-                            println!("CRC failed"); //TODO return Result
+                            log::warn!("CRC failed");
                             self.rxState = RxState::RxError;
                         }
                     }
@@ -295,7 +295,7 @@ impl InMessage {
             }
             RxState::RxEsc => {
                 if ch == common::PROTOCOL_ESC {
-                    println!("Received ESC in Msg state");
+                    log::warn!("Received ESC in Msg state");
                     self.rxState = RxState::RxError;
                 } else {
                     self.buf.push(ch ^ 0x20);
@@ -357,10 +357,11 @@ where
                 } else {
                     trace!("usi received {} ", array_to_hex_string(b[..t].to_vec()));
                 }
-                for ch in &mut b[..t] {
-                    //TODO, push whole slice
-                    self.buf.push_back(*ch);
-                }
+                // for ch in &mut b[..t] {
+                //     //TODO, push whole slice
+                //     self.buf.push_back(*ch);
+                // }
+                self.buf.extend(b[..t].iter());
                 // self.buf.append(b[..t].to_vec());
                 // let ch = b[0];
                 // trace!("Received {}", ch);
