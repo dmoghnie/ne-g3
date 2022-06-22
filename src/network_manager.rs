@@ -209,7 +209,9 @@ impl NetworkManager {
         Self::ipv4_from_short_addr(short_addr)
     }
     pub fn pan_id_and_short_addr_from_ipv6(ipv6: &Ipv6Addr) -> (u16, u16) {
+        log::trace!("---> pan_id_and_short_addr_from_ipv6 : {} ", ipv6);
         let segments = ipv6.segments();
+        log::trace!("---> pan_id_and_short_addr_from_ipv6 : {:?} ", segments);
         (segments[4], segments[7])
     }
     pub fn dscp_ecn_to_traffic_class (dscp: u8, ecn: u8) -> u8 {
@@ -244,6 +246,7 @@ impl NetworkManager {
 
     }
     pub fn ipv4_from_ipv6 (ipv6_pkt: ip::v6::Packet<Vec<u8>>) -> Result<Vec<u8>, packet::Error> {
+        log::trace!("-->ipv4_from_ipv6 : {:?}", ipv6_pkt);
         let dst = Self::ipv4_addr_from_ipv6(ipv6_pkt.destination());
         let src = Self::ipv4_addr_from_ipv6(ipv6_pkt.source());
         let (dscp, ecn) = Self::traffic_class_to_dscp_ecn(ipv6_pkt.traffic_class());
@@ -264,15 +267,25 @@ impl NetworkManager {
                 }
             },
             Protocol::Tcp => {
-                let tcp = tcp::Packet::new(ipv6_pkt.payload());
-                if let Ok(tcp) = tcp {
-                    let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
-                    .source(src)?.destination(dst)?
-                    .ttl(ipv6_pkt.hop_limit())?.tcp()?.acknowledgment(tcp.acknowledgment())?.destination(tcp.destination())?
-                    .flags(tcp.flags())?.sequence(tcp.sequence())?.source(tcp.source())?
-                    .window(tcp.window())?.pointer(tcp.pointer())?.payload(tcp.payload())?.build();
-                    return v;
+                log::trace!("-->ipv4_from_ipv6 : tcp --");
+                let ipv4 = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
+                .source(src)?.destination(dst)?
+                .ttl(ipv6_pkt.hop_limit())?.payload(ipv6_pkt.payload())?.build();
+                if let Ok(ipv4) = ip::v4::Packet::new(ipv4?) {
+                    let tcp = tcp::Packet::new(ipv4)?;
+                    return Ok(tcp.as_ref().to_vec());
                 }
+                
+                // let tcp = tcp::Packet::new(ipv6_pkt.payload());
+                // log::trace!("-->ipv4_from_ipv6 : tcp {:?}", tcp);
+                // if let Ok(tcp) = tcp {
+                //     let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
+                //     .source(src)?.destination(dst)?
+                //     .ttl(ipv6_pkt.hop_limit())?.tcp()?.acknowledgment(tcp.acknowledgment())?.destination(tcp.destination())?
+                //     .flags(tcp.flags())?.sequence(tcp.sequence())?.source(tcp.source())?
+                //     .window(tcp.window())?.pointer(tcp.pointer())?.payload(tcp.payload())?.build();
+                //     return v;
+                // }
             },
             _ => {
                 log::warn!("Received unsupported protocol {:?}", protocol);
@@ -326,7 +339,8 @@ impl NetworkManager {
                                 match ip::v6::Packet::new(g3_data.nsdu) {
                                     Ok(pkt) => {
                                         log::trace!("Received ipv6 packet from G3 {:?} - payload : {:?}", pkt, pkt.payload()); 
-                                        let (_, short_addr_dst) = Self::pan_id_and_short_addr_from_ipv6(&pkt.destination());                                       
+                                        let (_, short_addr_dst) = Self::pan_id_and_short_addr_from_ipv6(&pkt.destination());   
+                                        
                                         match Self::ipv4_from_ipv6(pkt) {
                                             Ok(ipv4_pkt) => {                                                                                               
                                                 log::trace!("sending ipv4 packet : {:?} -> dst short address {}", ipv4_pkt, short_addr_dst); 
