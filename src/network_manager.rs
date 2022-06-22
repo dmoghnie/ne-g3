@@ -268,24 +268,25 @@ impl NetworkManager {
             },
             Protocol::Tcp => {
                 log::trace!("-->ipv4_from_ipv6 : tcp --");
-                let ipv4 = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
-                .source(src)?.destination(dst)?
-                .ttl(ipv6_pkt.hop_limit())?.payload(ipv6_pkt.payload())?.build();
-                if let Ok(ipv4) = ip::v4::Packet::new(ipv4?) {
-                    let tcp = tcp::Packet::new(ipv4)?;
-                    return Ok(tcp.as_ref().to_vec());
-                }
-                
-                // let tcp = tcp::Packet::new(ipv6_pkt.payload());
-                // log::trace!("-->ipv4_from_ipv6 : tcp {:?}", tcp);
-                // if let Ok(tcp) = tcp {
-                //     let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
-                //     .source(src)?.destination(dst)?
-                //     .ttl(ipv6_pkt.hop_limit())?.tcp()?.acknowledgment(tcp.acknowledgment())?.destination(tcp.destination())?
-                //     .flags(tcp.flags())?.sequence(tcp.sequence())?.source(tcp.source())?
-                //     .window(tcp.window())?.pointer(tcp.pointer())?.payload(tcp.payload())?.build();
-                //     return v;
+                // let ipv4 = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
+                // .source(src)?.destination(dst)?
+                // .ttl(ipv6_pkt.hop_limit())?.payload(ipv6_pkt.payload())?.build();
+                // if let Ok(ipv4) = ip::v4::Packet::new(ipv4?) {
+                //     let tcp = tcp::Packet::new(ipv4)?;
+                //     log::trace!("ipv4_from_ipv6 : tcp : {:?}", tcp);
+                //     return Ok(tcp.as_ref().to_vec());
                 // }
+
+                let tcp = tcp::Packet::unchecked(ipv6_pkt.payload());
+                log::trace!("-->ipv4_from_ipv6 : tcp {:?}", tcp);
+
+                let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
+                .source(src)?.destination(dst)?
+                .ttl(ipv6_pkt.hop_limit())?.tcp()?.acknowledgment(tcp.acknowledgment())?.destination(tcp.destination())?
+                .flags(tcp.flags())?.sequence(tcp.sequence())?.source(tcp.source())?
+                .window(tcp.window())?.pointer(tcp.pointer())?.payload(tcp.payload())?.build();
+                return v;
+                
             },
             _ => {
                 log::warn!("Received unsupported protocol {:?}", protocol);
