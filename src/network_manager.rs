@@ -10,7 +10,7 @@ use bytes::{BytesMut, Buf};
 
 use config::Config;
 
-use packet::{icmp, ip, ether, buffer, Builder, AsPacket, Packet, udp};
+use packet::{icmp, ip::{self, Protocol}, ether, buffer, Builder, AsPacket, Packet, udp, tcp};
 use packet::buffer::Buffer;
 use futures::{stream::FuturesUnordered, StreamExt, future};
 
@@ -247,63 +247,39 @@ impl NetworkManager {
         let dst = Self::ipv4_addr_from_ipv6(ipv6_pkt.destination());
         let src = Self::ipv4_addr_from_ipv6(ipv6_pkt.source());
         let (dscp, ecn) = Self::traffic_class_to_dscp_ecn(ipv6_pkt.traffic_class());
-
-        // let payload = ipv6_pkt.payload().to_vec();
-        // let f_payload = &payload[..(payload.len() - 4usize)];
-        // log::trace!("ipv4_from_ipv6 payload : {:?}", f_payload);
-        /*
-        .id(0x2d87).unwrap()
-			.ttl(64).unwrap()
-			.source("66.102.1.108".parse().unwrap()).unwrap()
-			.destination("192.168.0.79".parse().unwrap()).unwrap()
-			.icmp().unwrap()
-				.echo().unwrap().request().unwrap()
-					.identifier(42).unwrap()
-					.sequence(2).unwrap()
-					.payload(b"test").unwrap()
-					.build().unwrap();
-        */
-        
-        // if ipv6_pkt.payload_length() < 8 {
-        //     return Err(packet::Error::InvalidPacket);
-        // }
-
-        // let mut payload = ipv6_pkt.payload();
-        
-        // let udp_src_port = ((payload[0] as u16) << 8) | (payload[1] as u16);
-        // let udp_dst_port = ((payload[2] as u16) << 8) | (payload[3] as u16);
-        // let udp_length = ((payload[4] as u16) << 8) | (payload[5] as u16);
-        // let udp_checksum = ((payload[6] as u16) << 8) | (payload[7] as u16);
-
-        // if (udp_length == 0) {
-        //     return Err(packet::Error::InvalidPacket);
-        // }
-
-        // payload.advance(8);
-        // if let Some(payload_f) = payload.chunk().get(0..(udp_length as usize - 8usize)){ // ipv6 over g3 is rounded to 8 bytes, we use the udp length minus the header
-        //     let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
-        //     .source(src)?.destination(dst)?
-        //     .ttl(ipv6_pkt.hop_limit())?.udp()?.source(udp_src_port)?.destination(udp_dst_port)?.payload(payload_f)?.build()?;
-        //     return ip::v4::Packet::new(v);
-
-        // }        
-        // Err(packet::Error::InvalidPacket)
-        
-        // let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
-        //     .source(src)?.destination(dst)?
-        //     .ttl(ipv6_pkt.hop_limit())?.payload(ipv6_pkt.payload())?.build()?;
-        // let ip = ip::Packet::new(v);
-        let udp = udp::Packet::new(ipv6_pkt.payload());
-        log::trace!("ipv4_from_ipv6 : udp - {:?}", udp);
-        if let Ok(udp) = udp {
-            let src_port = udp.source();
-            let dst_port = udp.destination();
-            
-            let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
-                .source(src)?.destination(dst)?
-                .ttl(ipv6_pkt.hop_limit())?.udp()?.source(src_port)?.destination(dst_port)?.payload(udp.payload())?.build();
-            return v;
+    
+        let protocol: ip::Protocol = ipv6_pkt.next_header().into();
+        match protocol {
+            Protocol::Udp => {
+                let udp = udp::Packet::new(ipv6_pkt.payload());
+                log::trace!("ipv4_from_ipv6 : udp - {:?}", udp);
+                if let Ok(udp) = udp {
+                    let src_port = udp.source();
+                    let dst_port = udp.destination();
+                    
+                    let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
+                        .source(src)?.destination(dst)?
+                        .ttl(ipv6_pkt.hop_limit())?.udp()?.source(src_port)?.destination(dst_port)?.payload(udp.payload())?.build();
+                    return v;
+                }
+            },
+            Protocol::Tcp => {
+                let tcp = tcp::Packet::new(ipv6_pkt.payload());
+                if let Ok(tcp) = tcp {
+                    let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
+                    .source(src)?.destination(dst)?
+                    .ttl(ipv6_pkt.hop_limit())?.tcp()?.acknowledgment(tcp.acknowledgment())?.destination(tcp.destination())?
+                    .flags(tcp.flags())?.sequence(tcp.sequence())?.source(tcp.source())?
+                    .window(tcp.window())?.pointer(tcp.pointer())?.payload(tcp.payload())?.build();
+                    return v;
+                }
+            },
+            _ => {
+                log::warn!("Received unsupported protocol {:?}", protocol);
+                return Err(packet::Error::InvalidPacket);
+            }
         }
+        
         // Ok(udp?.as_ref().to_vec())
         Err(packet::Error::InvalidPacket)
     }
