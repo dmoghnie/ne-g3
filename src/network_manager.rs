@@ -321,6 +321,10 @@ impl NetworkManager {
         let mut config = tun::Configuration::default();
 
         config.address(&ipv4).netmask((255, 255, 0, 0)).up();
+        #[cfg(target_os = "linux")]
+        config.platform(|config| {
+            config.packet_information(true);
+        });
         config
     }
 
