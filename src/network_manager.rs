@@ -89,10 +89,10 @@ impl TunDevice {
                 match tokio::time::timeout(Duration::from_millis(5000), reader.next()).await {
                     Ok(packet) => {
                         log::trace!("Tun reader received packet {:?}", packet);
-                        if let Some(pkt) = packet {
+                        if let Some(pkt) = packet {                            
                             match pkt {
                                 Ok(packet) => {
-                                    
+                                    log::trace!("ipv4 : {:?}", packet.get_bytes());
                                     self.listener.send(TunMessage::new(
                                         self.short_addr,
                                         TunPayload::Data(packet),
