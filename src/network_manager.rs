@@ -74,7 +74,7 @@ impl TunDevice {
         }
     }
 
-
+    #[cfg(target_os = "linux")]
     pub fn start_async(
         self,
         short_addr: u16, mut rx: tokio::sync::mpsc::UnboundedReceiver<TunMessage>
@@ -182,9 +182,13 @@ impl TunDevice {
     #[cfg(target_os = "macos")]
     pub fn start_async(
         self,
-        config: Configuration, mut rx: tokio::sync::mpsc::UnboundedReceiver<TunMessage>
+        short_addr: u16, mut rx: tokio::sync::mpsc::UnboundedReceiver<TunMessage>
     ) {
-        
+        let ipv4 = NetworkManager::ipv4_from_short_addr(short_addr);
+        let mut config = tun::Configuration::default();
+
+        config.address(&ipv4).netmask((255, 255, 0, 0)).up();
+
         let dev = tun::create_as_async(&config).unwrap();
         
         let (mut writer, mut reader) = dev.into_framed().split();
@@ -211,7 +215,7 @@ impl TunDevice {
                                     log::warn!("TunDevice error reading {}", e);
                                     self.listener.send(TunMessage::new(
                                         self.short_addr,
-                                        TunPayload::Error(tun::Error::Io(e)),
+                                        TunPayload::Error(()),
                                     ));
                                 }
                             }
