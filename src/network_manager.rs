@@ -281,14 +281,25 @@ impl NetworkManager {
                 let tcp = tcp::Packet::unchecked(ipv6_pkt.payload());
                 log::trace!("-->ipv4_from_ipv6 : tcp {:?}", tcp);
 
+                // let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
+                // .source(src)?.destination(dst)?
+                // .ttl(ipv6_pkt.hop_limit())?
+                // .tcp()?.acknowledgment(tcp.acknowledgment())?.destination(tcp.destination())?
+                // .flags(tcp.flags())?.sequence(tcp.sequence())?.source(tcp.source())?
+                // .window(tcp.window())?.pointer(tcp.pointer())?.payload(tcp.payload())?.build();
                 let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
                 .source(src)?.destination(dst)?
                 .ttl(ipv6_pkt.hop_limit())?
-                .tcp()?.acknowledgment(tcp.acknowledgment())?.destination(tcp.destination())?
-                .flags(tcp.flags())?.sequence(tcp.sequence())?.source(tcp.source())?
-                .window(tcp.window())?.pointer(tcp.pointer())?.payload(tcp.payload())?.build();
-                log::trace!("ipv4_from_ipv6 - result : ipv6 {:?}", v);
-                return v;
+                .payload(ipv6_pkt.payload())?.build();
+                //just a hack
+                if let Ok(mut v) = v {
+                    log::trace!("ipv4_from_ipv6 - result : ipv6 {:?}", v);
+                    v[9] = Protocol::Tcp.into(); 
+                    return Ok(v)   
+                }
+                
+                
+                return Err(packet::Error::InvalidPacket);
                 
             },
             _ => {
