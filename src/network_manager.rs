@@ -15,8 +15,9 @@ use packet::buffer::Buffer;
 use futures::{stream::FuturesUnordered, StreamExt, future};
 
 use futures::{SinkExt, channel::mpsc::UnboundedReceiver};
-use tokio::{time::{self, Duration}, pin, sync::mpsc, task::JoinHandle};
+use tokio::{time::{self, Duration}, pin, sync::mpsc, task::JoinHandle, io::AsyncReadExt, io::AsyncWriteExt};
 use tokio_util::codec::{Decoder, FramedRead};
+use tokio::io;
 
 use std::sync::atomic::Ordering;
 
@@ -34,7 +35,7 @@ use rand::Rng;
 enum TunPayload {
     Data(Vec<u8>),
     Stop,
-    Error(tun::Error),
+    Error(()), //TODO
 }
 
 #[derive(Debug)]
@@ -73,6 +74,112 @@ impl TunDevice {
         }
     }
 
+
+    pub fn start_async(
+        self,
+        short_addr: u16, mut rx: tokio::sync::mpsc::UnboundedReceiver<TunMessage>
+    ) {
+        
+        let ipv4_addr = NetworkManager::ipv4_from_short_addr(short_addr);
+        let dev =  tokio_tun::TunBuilder::new()
+        .name("")
+        .address(ipv4_addr)
+        .netmask("255.255.0.0".parse().unwrap())            // if name is empty, then it is set by kernel.
+        .tap(false)          // false (default): TUN, true: TAP.
+        .packet_info(false)  // false: IFF_NO_PI, default is true.
+        .up()                // or set it up manually using `sudo ip link set <tun-name> up`.
+        .try_build().unwrap(); //TODO
+        
+        let (mut reader, mut writer) = tokio::io::split(dev);
+        
+        
+
+        // let mut running = AtomicBool::new(true);
+        let running = Arc::new(AtomicBool::new(true));
+        let should_run = running.clone();
+        let f1 = tokio::task::spawn(async move {
+            log::trace!("start_async read next ....");
+            let mut buf = [0u8; 2048];
+            loop {                
+                match tokio::time::timeout(Duration::from_millis(5000), reader.read(&mut buf)).await {
+                    Ok(r_size) => {
+                        log::trace!("Tun reader received packet {:?}", r_size);
+                        if let Ok(size) = r_size {  
+                            let pkt = ip::v4::Packet::new(&buf[..size]);                          
+                            match pkt {
+                                Ok(packet) => {
+                                    log::trace!("ipv4 : {:?}", packet);
+                                    self.listener.send(TunMessage::new(
+                                        self.short_addr,
+                                        TunPayload::Data(packet.as_ref().to_vec()),
+                                    )); //TODO check the result
+                                }
+                                Err(e) => {
+                                    log::warn!("TunDevice error reading {}", e);
+                                    self.listener.send(TunMessage::new(
+                                        self.short_addr,
+                                        TunPayload::Error(()),
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log::trace!("tun device read timeout");
+                        if !running.load(Ordering::SeqCst) {
+                            log::trace!("Breaking from tun reader");
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+        // .await;
+        // match result {
+        //     Ok(_) => {},
+        //     Err(e) => {
+        //         log::warn!("Failed to await {}", e);
+        //     },
+        // }
+        
+        let f2 = tokio::task::spawn(async move {
+            log::trace!("spawning packet writer");
+            loop {
+                match rx.recv().await {
+                    Some(msg) => {
+                        log::trace!("Tun writer, writing packet : {:?}", msg);
+                        match msg.get_payload() {
+                            TunPayload::Data(packet) => {
+                                
+                                match writer.write(&packet).await {
+                                    Ok(_) => log::trace!("ipv4 msg sent"),
+                                    Err(e) => log::warn!("Failed to write msg : {:?}", e),
+                                }
+                            }
+                            TunPayload::Stop => {
+                                //Remove from device list ??
+                                should_run.store(false, Ordering::SeqCst);
+                                break;
+                            }
+                            TunPayload::Error(_) => {} //TODO check error
+                        }
+                    }
+                    None => {
+                        log::warn!("writer : Failed to receive network message");
+                    },                    
+                }
+            }
+        });
+        // match r {
+        //     Ok(_) => {},
+        //     Err(e) => {log::warn!("Failed to start packet writer : {}", e)},
+        // }
+        // .await;
+        log::trace!("start async end ...");
+
+    }
+
+    #[cfg(target_os = "macos")]
     pub fn start_async(
         self,
         config: Configuration, mut rx: tokio::sync::mpsc::UnboundedReceiver<TunMessage>
@@ -319,17 +426,17 @@ impl NetworkManager {
         v
     }
 
-    pub fn config_from_short_addr (short_addr: u16) -> Configuration {
-        let ipv4 = Self::ipv4_from_short_addr(short_addr);
-        let mut config = tun::Configuration::default();
+    // pub fn config_from_short_addr (short_addr: u16) -> Configuration {
+    //     let ipv4 = Self::ipv4_from_short_addr(short_addr);
+    //     let mut config = tun::Configuration::default();
 
-        config.address(&ipv4).netmask((255, 255, 0, 0)).up();
-        #[cfg(target_os = "linux")]
-        config.platform(|config| {
-            config.packet_information(true);
-        });
-        config
-    }
+    //     config.address(&ipv4).netmask((255, 255, 0, 0)).up();
+    //     #[cfg(target_os = "linux")]
+    //     config.platform(|config| {
+    //         config.packet_information(true);
+    //     });
+    //     config
+    // }
 
     // fn start_tun(&mut self, short_addr: u16) -> Option<(posix::Reader, posix::Writer)> {
     //     let ipv4 = Self::ipv4_from_short_addr(short_addr);
@@ -394,7 +501,7 @@ impl NetworkManager {
                                             short_addr,
                                             tx
                                         );
-                                        tun_device.start_async(Self::config_from_short_addr(short_addr), rx);
+                                        tun_device.start_async(short_addr, rx);
                                         
                                         
                                     }
@@ -414,7 +521,7 @@ impl NetworkManager {
                                             tx
                                         );
                                        
-                                        tun_device.start_async(Self::config_from_short_addr(short_addr), rx);
+                                        tun_device.start_async(short_addr, rx);
                                         
                                     }
                                     
@@ -468,7 +575,7 @@ impl NetworkManager {
                             TunPayload::Stop => { //Should we use this as a notification that the device is stopped or should we have a separate message
                             }
                             TunPayload::Error(e) => {
-                                log::trace!("Received error from device {}", e);
+                                log::trace!("Received error from device");
                             }
                         }
                     }

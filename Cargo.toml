@@ -40,7 +40,7 @@ tun = {version = "0.5.3", features = ["async"]}
 tokio-tun = "*"
 
 [target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "ios", target_os = "android"))'.dependencies]
-tokio = { version = "1.19.2", features = ["net", "macros", "rt-multi-thread", "time"]}
+tokio = { version = "1.19.2", features = ["full"]}
 # tokio-stream = "*"
 tokio-util = { version = "0.7.3", features = ["codec"]}
 
