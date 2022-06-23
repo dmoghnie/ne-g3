@@ -134,7 +134,10 @@ impl TunDevice {
                         log::trace!("Tun writer, writing packet : {:?}", msg);
                         match msg.get_payload() {
                             TunPayload::Data(packet) => {
-                                writer.send(TunPacket::new(packet.get_bytes().to_vec())).await;
+                                match writer.send(TunPacket::new(packet.get_bytes().to_vec())).await {
+                                    Ok(_) => log::trace!("ipv4 msg sent"),
+                                    Err(e) => log::warn!("Failed to write msg : {:?}", e),
+                                }
                             }
                             TunPayload::Stop => {
                                 //Remove from device list ??
@@ -288,7 +291,9 @@ impl NetworkManager {
                 .tcp()?.source(tcp.source())?.destination(tcp.destination())?
                 .sequence(tcp.sequence())?.acknowledgment(tcp.acknowledgment())?
                 .window(tcp.window())?.pointer(tcp.pointer())?.flags(tcp.flags())?.payload(tcp.payload())?.build();
-
+                if let Ok(pkt_data) = &v {
+                    log::trace!("-->ipv4_from_ipv6 : result : {:?}", ip::v4::Packet::new(pkt_data));
+                }
                 return v;
                 
             },
