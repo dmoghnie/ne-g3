@@ -657,6 +657,7 @@ dependencies = [
  "serialport",
  "thiserror",
  "tokio",
+ "tokio-tun",
  "tokio-util 0.7.3",
  "tun",
 ]
@@ -1150,6 +1151,18 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "tokio-tun"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "580a70cdceb1343a61b4864294600c25d0834b56e93eae4271f5882724521017"
+dependencies = [
+ "futures",
+ "libc",
+ "nix",
+ "tokio",
 ]
 
 [[package]]

@@ -33,8 +33,11 @@ serde_derive = "*"
 packet = {path = "../../libs/rust-packet"}
 futures = "0.3.21"
 
-
+[target.'cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))'.dependencies]
 tun = {version = "0.5.3", features = ["async"]}
+
+[target.'cfg(any(target_os = "linux"))'.dependencies]
+tokio-tun = "*"
 
 [target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "ios", target_os = "android"))'.dependencies]
 tokio = { version = "1.19.2", features = ["net", "macros", "rt-multi-thread", "time"]}

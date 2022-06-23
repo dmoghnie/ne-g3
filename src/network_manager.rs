@@ -19,6 +19,8 @@ use tokio::{time::{self, Duration}, pin, sync::mpsc, task::JoinHandle};
 use tokio_util::codec::{Decoder, FramedRead};
 
 use std::sync::atomic::Ordering;
+
+#[cfg(target_os = "macos")]
 use tun::{self, AsyncDevice, Configuration, TunPacket, TunPacketCodec};
 
 use crate::{
@@ -30,7 +32,7 @@ use rand::Rng;
 
 #[derive(Debug)]
 enum TunPayload {
-    Data(TunPacket),
+    Data(Vec<u8>),
     Stop,
     Error(tun::Error),
 }
@@ -59,7 +61,7 @@ impl TunMessage {
 struct TunDevice {
     short_addr: u16,
     listener: mpsc::UnboundedSender<TunMessage>,
-    device: Option<AsyncDevice>,
+
 }
 
 impl TunDevice {
@@ -67,7 +69,7 @@ impl TunDevice {
         TunDevice {
             short_addr,
             listener,
-            device: None,
+
         }
     }
 
@@ -77,7 +79,7 @@ impl TunDevice {
     ) {
         
         let dev = tun::create_as_async(&config).unwrap();
-    
+        
         let (mut writer, mut reader) = dev.into_framed().split();
         log::trace!("Start async ... for {:?}", config);
         // let mut running = AtomicBool::new(true);
@@ -95,7 +97,7 @@ impl TunDevice {
                                     log::trace!("ipv4 : {:?}", packet.get_bytes());
                                     self.listener.send(TunMessage::new(
                                         self.short_addr,
-                                        TunPayload::Data(packet),
+                                        TunPayload::Data(packet.get_bytes().to_vec()),
                                     )); //TODO check the result
                                 }
                                 Err(e) => {
@@ -134,7 +136,8 @@ impl TunDevice {
                         log::trace!("Tun writer, writing packet : {:?}", msg);
                         match msg.get_payload() {
                             TunPayload::Data(packet) => {
-                                match writer.send(TunPacket::new(packet.get_bytes().to_vec())).await {
+                                
+                                match writer.send(TunPacket::new(packet)).await {
                                     Ok(_) => log::trace!("ipv4 msg sent"),
                                     Err(e) => log::warn!("Failed to write msg : {:?}", e),
                                 }
@@ -229,7 +232,7 @@ impl NetworkManager {
         (traffic_class >> 2, traffic_class & 0b0000_0011)
     }
     
-    pub fn ipv6_from_ipv4 (pan_id: u16, ipv4_pkt: ip::v4::Packet<&[u8]>) -> Result<Vec<u8>, packet::Error> {
+    pub fn ipv6_from_ipv4 (pan_id: u16, ipv4_pkt: ip::v4::Packet<Vec<u8>>) -> Result<Vec<u8>, packet::Error> {
         let dst = Self::ipv6_addr_from_ipv4_addr(pan_id,&ipv4_pkt.destination());
         let src = Self::ipv6_addr_from_ipv4_addr(pan_id, &ipv4_pkt.source());
         
@@ -361,7 +364,7 @@ impl NetworkManager {
                                                 if let Some(tx) = self.tun_devices.get(&short_addr_dst) {
                                                     log::trace!("found sender for short addr {} -- sending TunPayload::Data", short_addr_dst);
                                                     match tx.send(TunMessage { short_addr: short_addr_dst, 
-                                                        payload: TunPayload::Data(TunPacket::new(ipv4_pkt)) }){
+                                                        payload: TunPayload::Data(ipv4_pkt) }){
                                                             Ok(_) => {},
                                                             Err(e) => {log::warn!("Failed to send ipv4 packet to TUN : {}", e)},
                                                         }
@@ -435,7 +438,7 @@ impl NetworkManager {
                         match msg.payload {
                             TunPayload::Data(pkt) => {
                                 
-                                match ip::Packet::new(pkt.get_bytes()) {
+                                match ip::Packet::new(pkt) {
                                     Ok(pkt) => {
                                         match pkt {
                                             ip::Packet::V4(ipv4_pkt) => {
