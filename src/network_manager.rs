@@ -308,7 +308,7 @@ impl NetworkManager {
     pub fn ipv4_from_short_addr(short_addr: u16) -> Ipv4Addr {
         let s = short_addr + 1;
         let b = s.to_be_bytes();
-        Ipv4Addr::new(10u8, 0u8, b[0], b[1])
+        Ipv4Addr::new(10u8, 0u8, b[0], b[1]) //TODO parameterize
     }
     pub fn short_addr_from_ipv4 (ipv4: &Ipv4Addr) -> u16 {
         let o = ipv4.octets();        
@@ -385,16 +385,6 @@ impl NetworkManager {
             },
             Protocol::Tcp => {
                 log::trace!("-->ipv4_from_ipv6 : tcp --");
-        //         .acknowledgment(ack).unwrap()
-        // .source(1337).unwrap()
-        // .destination(9001).unwrap()        
-        // .sequence(seq).unwrap()
-        // .acknowledgment(ack).unwrap()
-        // .window(window).unwrap()
-        // .flags(flags).unwrap()        
-        // .payload(tcp.payload()).unwrap()
-        // .build().unwrap();
-
                 log::trace!("-->ipv4_from_ipv6 : ipv6 payload : {:?}", ipv6_pkt.payload());
                 let tcp = tcp::Packet::unchecked(ipv6_pkt.payload());
                 log::trace!("-->ipv4_from_ipv6 : tcp {:?}", tcp);
@@ -410,6 +400,13 @@ impl NetworkManager {
                 }
                 return v;
                 
+            },
+            Protocol::Icmp => {
+                // let icmp = icmp::Packet::unchecked(ipv6_pkt.payload());
+                // let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
+                // .source(src)?.destination(dst)?
+                // .ttl(ipv6_pkt.hop_limit())?
+                // .icmp()?.
             },
             _ => {
                 log::warn!("Received unsupported protocol {:?}", protocol);
@@ -530,6 +527,7 @@ impl NetworkManager {
                                     }
                                     
                                 }
+                                
                             }
                             _ => {}
                         }

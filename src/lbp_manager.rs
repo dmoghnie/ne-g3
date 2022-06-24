@@ -68,6 +68,21 @@ impl DeviceSlot {
             data: None,
         }
     }
+    pub fn reset (&mut self, ext_addr: TExtendedAddress, short_addr: u16) {
+        self.state = DeviceState::BS_STATE_WAITING_JOINNING;
+        self.m_lbd_address = ext_addr;
+        self.us_lba_src_addr = 0;
+        self.us_assigned_short_address = short_addr;
+        self.uc_tx_handle = 0xff;
+        self.ul_timeout = 0;
+        self.uc_tx_attemps = 0;
+        self.m_rand_s = TEapPskRand::new();
+        self.uc_pending_confirms = 0;
+        self.uc_pending_tx_handler = 0;
+        self.m_psk_context = TEapPskContext::new();
+        self.data = None;
+
+    }
 }
 
 type DeviceSlotRef = Rc<RefCell<DeviceSlot>>;
@@ -316,6 +331,11 @@ impl LbpManager {
 
         if msg.bootstrapping_data.len() == 0 {
             let mut device = device.borrow_mut();
+            if device.state != DeviceState::BS_STATE_WAITING_JOINNING {
+                let o_short_addr = device.us_assigned_short_address;
+                let o_ext_addr = device.m_lbd_address;
+                device.reset(o_ext_addr, o_short_addr);
+            }
             //First join message
             if (device.state == DeviceState::BS_STATE_WAITING_JOINNING) {
                 eap_psk_initialize(&app_config::G_EAP_PSK_KEY, &mut device.m_psk_context);

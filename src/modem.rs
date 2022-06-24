@@ -68,7 +68,7 @@ lazy_static! {
         (
             adp::EAdpPibAttribute::ADP_IB_MAX_JOIN_WAIT_TIME,
             0,
-            vec![0x00, 0x5A]
+            vec![0x00, 0x0f]
         ),
         (
             adp::EAdpPibAttribute::ADP_IB_MAX_HOPS,
@@ -182,10 +182,16 @@ impl Modem {
     fn process_state_joining_network(&mut self, msg: &adp::Message) {
         match msg {
             Message::AdpG3NetworkJoinResponse(join_network_response) => {
-                if join_network_response.status == EAdpStatus::G3_SUCCESS {
-                    // self.state = State::Ready;
-                } else {
-                    log::warn!("Failed to join network"); // TODO, recovery
+                match join_network_response.status {
+                    EAdpStatus::G3_SUCCESS => {
+                        self.state = State::Ready;
+                    },
+                    EAdpStatus::G3_TIMEOUT => {
+                        self.joinNetwork();
+                    }
+                    _ => {
+                        log::warn!("Failed to join network : {:?}", join_network_response.status); // TODO, recovery
+                    }
                 }
             },
             Message::AdpG3SetMacResponse(mac_set_response) => {
