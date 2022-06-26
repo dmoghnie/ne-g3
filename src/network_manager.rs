@@ -106,7 +106,7 @@ impl TunDevice {
                     Ok(r_size) => {
                         log::trace!("Tun reader received packet {:?}", r_size);
                         if let Ok(size) = r_size {  
-                            let pkt = ip::v4::Packet::new(&buf[..size]);                          
+                            let pkt = ip::v4::Packet::new(&buf[4..size]);//packet info is true, remove first 4 bytes    
                             match pkt {
                                 Ok(packet) => {
                                     log::trace!("ipv4 : {:?}", packet);
