@@ -400,7 +400,8 @@ impl NetworkManager {
                 // .window(1280)?.pointer(tcp.pointer())?.flags(tcp.flags())?.payload(tcp.payload())?.build();
                 let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
                 .source(src)?.destination(dst)?
-                .ttl(ipv6_pkt.hop_limit())?.protocol(Protocol::Tcp)?.payload(tcp)?.build();
+                .ttl(ipv6_pkt.hop_limit())?.tcp()?.payload(tcp)?.build();
+
                 // if let Ok(pkt_data) = &v {
                 //     log::trace!("-->ipv4_from_ipv6 : result : {:?}", ip::v4::Packet::new(pkt_data));
                 // }
