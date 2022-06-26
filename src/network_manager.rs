@@ -405,14 +405,15 @@ impl NetworkManager {
                 // tcp.set_window(1280);
                 log::trace!("-->ipv4_from_ipv6 : tcp {:?}", tcp);
                 let mut new_packet_buffer = [0u8; 1280];
-                let mut ipv4_packet = MutableIpv4Packet::new(&mut new_packet_buffer).unwrap();                
+                let mut ipv4_packet = MutableIpv4Packet::new(&mut new_packet_buffer).unwrap();    
+                ipv4_packet.set_header_length(20);            
                 ipv4_packet.set_dscp(dscp);
                 ipv4_packet.set_ecn(ecn);
                 ipv4_packet.set_source(src);
                 ipv4_packet.set_destination(dst);
                 ipv4_packet.set_ttl(ipv6_pkt.hop_limit());
                 ipv4_packet.set_next_level_protocol(IpNextHeaderProtocols::Tcp);
-                ipv4_packet.set_header_length(20);
+
                 // ipv4_packet.set_total_length(20 + ipv6_pkt.payload_length());
                 ipv4_packet.set_payload(ipv6_pkt.payload());
                 // let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
