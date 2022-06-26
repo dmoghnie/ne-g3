@@ -413,7 +413,7 @@ impl NetworkManager {
                 ipv4_packet.set_ttl(ipv6_pkt.hop_limit());
                 ipv4_packet.set_next_level_protocol(IpNextHeaderProtocols::Tcp);
                 ipv4_packet.set_header_length(20);
-                ipv4_packet.set_total_length(20 + ipv6_pkt.payload_length());
+                // ipv4_packet.set_total_length(20 + ipv6_pkt.payload_length());
                 ipv4_packet.set_payload(ipv6_pkt.payload());
                 // let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
                 // .source(src)?.destination(dst)?
