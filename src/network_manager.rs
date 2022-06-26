@@ -15,6 +15,7 @@ use packet::buffer::Buffer;
 use futures::{stream::FuturesUnordered, StreamExt, future};
 
 use futures::{SinkExt, channel::mpsc::UnboundedReceiver};
+use pnet::packet::{ipv6::MutableIpv6Packet, ipv4::MutableIpv4Packet, ip::IpNextHeaderProtocols};
 use tokio::{time::{self, Duration}, pin, sync::mpsc, task::JoinHandle, io::AsyncReadExt, io::AsyncWriteExt};
 use tokio_util::codec::{Decoder, FramedRead};
 use tokio::io;
@@ -358,6 +359,17 @@ impl NetworkManager {
             .destination(dst)?
             .payload(ipv4_pkt.payload())?
             .build()?;
+            let mut new_packet_buffer = [0u8; 1280];
+            let mut ipv6_packet = MutableIpv6Packet::new(&mut new_packet_buffer).unwrap();
+            ipv6_packet.set_traffic_class(Self::dscp_ecn_to_traffic_class(ipv4_pkt.dscp(), ipv4_pkt.ecn()));
+            ipv6_packet.set_flow_label(0);
+            ipv6_packet.set_payload_length(ipv4_pkt.payload().len().try_into().unwrap());
+            let p:u8 = ipv4_pkt.protocol().into();
+            ipv6_packet.set_next_header(pnet::packet::ip::IpNextHeaderProtocol(p));
+            ipv6_packet.set_hop_limit(ipv4_pkt.ttl());
+            ipv6_packet.set_source(src);
+            ipv6_packet.set_destination(dst);
+            ipv6_packet.set_payload(ipv4_pkt.payload());
 
 
         Ok(v)
@@ -391,22 +403,30 @@ impl NetworkManager {
                 // let mut tcp = tcp::Packet::unchecked(ipv6_pkt.payload());
                 // tcp.set_window(1280);
                 log::trace!("-->ipv4_from_ipv6 : tcp {:?}", tcp);
-                
-                
+                let mut new_packet_buffer = [0u8; 1280];
+                let mut ipv4_packet = MutableIpv4Packet::new(&mut new_packet_buffer).unwrap();
+                ipv4_packet.set_dscp(dscp);
+                ipv4_packet.set_ecn(ecn);
+                ipv4_packet.set_source(src);
+                ipv4_packet.set_destination(dst);
+                ipv4_packet.set_ttl(ipv6_pkt.hop_limit());
+                ipv4_packet.set_next_level_protocol(IpNextHeaderProtocols::Tcp);
+                ipv4_packet.set_payload(ipv6_pkt.payload());
                 // let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
                 // .source(src)?.destination(dst)?
                 // .ttl(ipv6_pkt.hop_limit())?
                 // .tcp()?.source(tcp.source())?.destination(tcp.destination())?
                 // .sequence(tcp.sequence())?.acknowledgment(tcp.acknowledgment())?
                 // .window(1280)?.pointer(tcp.pointer())?.flags(tcp.flags())?.payload(tcp.payload())?.build();
-                let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
-                .source(src)?.destination(dst)?
-                .ttl(ipv6_pkt.hop_limit())?.tcp()?.payload(tcp)?.build();
+                // let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
+                // .source(src)?.destination(dst)?
+                // .ttl(ipv6_pkt.hop_limit())?.tcp()?.payload(tcp)?.build();
 
                 // if let Ok(pkt_data) = &v {
                 //     log::trace!("-->ipv4_from_ipv6 : result : {:?}", ip::v4::Packet::new(pkt_data));
                 // }
-                return v;
+                use pnet::packet::Packet;
+                return Ok(ipv4_packet.to_immutable().packet().to_vec());
                 
             },
             Protocol::Icmp => {
