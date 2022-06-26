@@ -388,20 +388,20 @@ impl NetworkManager {
                 log::trace!("-->ipv4_from_ipv6 : tcp --");
                 log::trace!("-->ipv4_from_ipv6 : ipv6 payload : {:?}", ipv6_pkt.payload());
                 let (ip, tcp) = ipv6_pkt.split();
-                // let mut tcp = tcp::Packet::unchecked(ipv6_pkt.payload());
+                let mut tcp = tcp::Packet::unchecked(ipv6_pkt.payload());
                 // tcp.set_window(1280);
                 log::trace!("-->ipv4_from_ipv6 : tcp {:?}", tcp);
                 
                 
-                // let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
-                // .source(src)?.destination(dst)?
-                // .ttl(ipv6_pkt.hop_limit())?
-                // .tcp()?.source(tcp.source())?.destination(tcp.destination())?
-                // .sequence(tcp.sequence())?.acknowledgment(tcp.acknowledgment())?
-                // .window(1280)?.pointer(tcp.pointer())?.flags(tcp.flags())?.payload(tcp.payload())?.build();
                 let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
                 .source(src)?.destination(dst)?
-                .ttl(ipv6_pkt.hop_limit())?.tcp()?.payload(tcp)?.build();
+                .ttl(ipv6_pkt.hop_limit())?
+                .tcp()?.source(tcp.source())?.destination(tcp.destination())?
+                .sequence(tcp.sequence())?.acknowledgment(tcp.acknowledgment())?
+                .window(1280)?.pointer(tcp.pointer())?.flags(tcp.flags())?.options(tcp.raw_options())?.payload(tcp.payload())?.build();
+                // let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
+                // .source(src)?.destination(dst)?
+                // .ttl(ipv6_pkt.hop_limit())?.tcp()?.payload(tcp)?.build();
 
                 // if let Ok(pkt_data) = &v {
                 //     log::trace!("-->ipv4_from_ipv6 : result : {:?}", ip::v4::Packet::new(pkt_data));
