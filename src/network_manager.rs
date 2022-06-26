@@ -401,9 +401,9 @@ impl NetworkManager {
                 let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
                 .source(src)?.destination(dst)?
                 .ttl(ipv6_pkt.hop_limit())?.payload(tcp)?.build();
-                if let Ok(pkt_data) = &v {
-                    log::trace!("-->ipv4_from_ipv6 : result : {:?}", ip::v4::Packet::new(pkt_data));
-                }
+                // if let Ok(pkt_data) = &v {
+                //     log::trace!("-->ipv4_from_ipv6 : result : {:?}", ip::v4::Packet::new(pkt_data));
+                // }
                 return v;
                 
             },
