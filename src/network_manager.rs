@@ -168,6 +168,7 @@ impl TunDevice {
                     }
                     None => {
                         log::warn!("writer : Failed to receive network message");
+                        break;
                     },                    
                 }
             }
