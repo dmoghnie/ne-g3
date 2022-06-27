@@ -87,7 +87,7 @@ impl TunDevice {
         .netmask("255.255.0.0".parse().unwrap())            // if name is empty, then it is set by kernel.
         .tap(false)
         .mtu(1280)          // false (default): TUN, true: TAP.
-        .packet_info(true)  // false: IFF_NO_PI, default is true.
+        .packet_info(false)  // false: IFF_NO_PI, default is true.
         .up()                // or set it up manually using `sudo ip link set <tun-name> up`.
         .try_build().unwrap(); //TODO
         
