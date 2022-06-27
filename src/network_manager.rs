@@ -406,7 +406,8 @@ impl NetworkManager {
                 log::trace!("-->ipv4_from_ipv6 : tcp {:?}", tcp);
                 let mut new_packet_buffer = [0u8; 1280];
                 let mut ipv4_packet = MutableIpv4Packet::new(&mut new_packet_buffer).unwrap();                    
-                ipv4_packet.set_header_length(20);
+                ipv4_packet.set_version(4);
+                ipv4_packet.set_header_length(5);
                 ipv4_packet.set_total_length(20 + ipv6_pkt.payload_length());        
                 ipv4_packet.set_dscp(dscp);
                 ipv4_packet.set_ecn(ecn);
