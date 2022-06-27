@@ -250,7 +250,7 @@ impl TunDevice {
                         log::trace!("Tun writer, writing packet : {:?}", msg);
                         match msg.get_payload() {
                             TunPayload::Data(packet) => {
-                                
+                                log::trace!("Tun writer, writing packet : {:?}, len {}", packet, packet.len());
                                 match writer.send(TunPacket::new(packet)).await {
                                     Ok(_) => log::trace!("ipv4 msg sent"),
                                     Err(e) => log::warn!("Failed to write msg : {:?}", e),
