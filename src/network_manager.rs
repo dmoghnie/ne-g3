@@ -406,7 +406,8 @@ impl NetworkManager {
                 log::trace!("-->ipv4_from_ipv6 : tcp {:?}", tcp);
                 let mut new_packet_buffer = [0u8; 1280];
                 let mut ipv4_packet = MutableIpv4Packet::new(&mut new_packet_buffer).unwrap();                    
-                ipv4_packet.set_total_length(ipv6_pkt.payload_length());        
+                ipv4_packet.set_header_length(20);
+                ipv4_packet.set_total_length(20 + ipv6_pkt.payload_length());        
                 ipv4_packet.set_dscp(dscp);
                 ipv4_packet.set_ecn(ecn);
                 ipv4_packet.set_source(src);
@@ -428,7 +429,7 @@ impl NetworkManager {
                 //     log::trace!("-->ipv4_from_ipv6 : result : {:?}", ip::v4::Packet::new(pkt_data));
                 // }
                 use pnet::packet::Packet;
-                return Ok(ipv4_packet.to_immutable().packet().to_vec());
+                return Ok(ipv4_packet.packet().split_at(ipv4_packet.get_total_length() as usize).0.to_vec());
                 
             },
             Protocol::Icmp => {
