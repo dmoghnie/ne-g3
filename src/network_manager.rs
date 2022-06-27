@@ -399,7 +399,7 @@ impl NetworkManager {
                 .ttl(ipv6_pkt.hop_limit())?.flags(ip::v4::flag::DONT_FRAGMENT)?                
                 .tcp()?.source(tcp.source())?.destination(tcp.destination())?
                 .sequence(tcp.sequence())?.acknowledgment(tcp.acknowledgment())?
-                .window(1280)?.pointer(tcp.pointer())?.flags(tcp.flags())?.options(tcp.raw_options())?.payload(tcp.payload())?.build();
+                .pointer(tcp.pointer())?.flags(tcp.flags())?.options(tcp.raw_options())?.payload(tcp.payload())?.build();
                 // let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
                 // .source(src)?.destination(dst)?
                 // .ttl(ipv6_pkt.hop_limit())?.tcp()?.payload(tcp)?.build();
