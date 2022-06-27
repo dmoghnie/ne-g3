@@ -396,7 +396,7 @@ impl NetworkManager {
                 
                 let v = ip::v4::Builder::default().id(0)?.dscp(dscp)?.ecn(ecn)?
                 .source(src)?.destination(dst)?
-                .ttl(ipv6_pkt.hop_limit())?.flags(ip::v4::flag::DONT_FRAGMENT)?                
+                .ttl(ipv6_pkt.hop_limit())?.flags(ip::v4::flag::DONT_FRAGMENT)?.offset(0)?                
                 .tcp()?.source(tcp.source())?.destination(tcp.destination())?
                 .sequence(tcp.sequence())?.acknowledgment(tcp.acknowledgment())?
                 .pointer(tcp.pointer())?.flags(tcp.flags())?.options(tcp.raw_options())?.payload(tcp.payload())?.build();
