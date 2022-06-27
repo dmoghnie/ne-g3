@@ -347,9 +347,10 @@ impl NetworkManager {
     pub fn ipv6_from_ipv4 (pan_id: u16, ipv4_pkt: ip::v4::Packet<Vec<u8>>) -> Result<Vec<u8>, packet::Error> {
         let dst = Self::ipv6_addr_from_ipv4_addr(pan_id,&ipv4_pkt.destination());
         let src = Self::ipv6_addr_from_ipv4_addr(pan_id, &ipv4_pkt.source());
-        
+        let traffic_class = Self::dscp_ecn_to_traffic_class(ipv4_pkt.dscp(), ipv4_pkt.ecn());
+        log::trace!("***** setting traffic class to {}", traffic_class);
         let v = ip::v6::Builder::default()
-            .traffic_class(Self::dscp_ecn_to_traffic_class(ipv4_pkt.dscp(), ipv4_pkt.ecn()))?
+            .traffic_class(traffic_class)?
             .flow_label(0)?//TODO, 
             .payload_length(ipv4_pkt.payload().len() as u16)?
             .next_header(ipv4_pkt.protocol().into())?
