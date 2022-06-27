@@ -86,7 +86,7 @@ impl TunDevice {
         .address(ipv4_addr)
         .netmask("255.255.0.0".parse().unwrap())            // if name is empty, then it is set by kernel.
         .tap(false)
-        .mtu(1280)          // false (default): TUN, true: TAP.
+        .mtu(1220)          // false (default): TUN, true: TAP.
         .packet_info(false)  // false: IFF_NO_PI, default is true.
         .up()                // or set it up manually using `sudo ip link set <tun-name> up`.
         .try_build().unwrap(); //TODO
@@ -188,7 +188,7 @@ impl TunDevice {
         let ipv4 = NetworkManager::ipv4_from_short_addr(short_addr);
         let mut config = tun::Configuration::default();
 
-        config.mtu(1280).address(&ipv4).netmask((255, 255, 0, 0)).up();
+        config.mtu(1220).address(&ipv4).netmask((255, 255, 0, 0)).up();
 
         let dev = tun::create_as_async(&config).unwrap();
         
