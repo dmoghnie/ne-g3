@@ -393,7 +393,7 @@ impl NetworkManager {
                 log::trace!("-->ipv4_from_ipv6 : tcp {:?}", tcp);
                 
                 
-                let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
+                let v = ip::v4::Builder::default().id(0)?.dscp(dscp)?.ecn(ecn)?
                 .source(src)?.destination(dst)?
                 .ttl(ipv6_pkt.hop_limit())?                
                 .tcp()?.source(tcp.source())?.destination(tcp.destination())?
