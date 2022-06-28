@@ -319,22 +319,22 @@ pub enum PortState {
 pub struct Port<'a, T> {
     message: usi::InMessage,
     buf: VecDeque<u8>,
-    channel: T,
+    receiver: T,
     state: &'a PortState,
     listeners: Vec<flume::Sender<Message>>,
 }
 
 //thread object should be static, makes sense! Since threads may live for the duration of the program
-impl<'a, T: Read + Write + Send> Port<'a, T>
+impl<'a, T: Read + Send> Port<'a, T>
 where
     'a: 'static,
-    T: 'static,
+    T: 'static
 {
-    pub fn new(channel: T) -> Port<'a, T> {
+    pub fn new(receiver: T) -> Port<'a, T> {
         Port {
             message: usi::InMessage::new(),
             buf: VecDeque::with_capacity(2048),
-            channel: channel,
+            receiver,
             state: &PortState::Stopped,
             listeners: Vec::new(),
         }
@@ -350,7 +350,7 @@ where
     fn process(&mut self) {
         let mut b = [0; 2048];
 
-        match self.channel.read(&mut b) {
+        match self.receiver.read(&mut b) {
             Ok(t) => {
                 if t == 0 {
                     return;
@@ -390,33 +390,48 @@ where
             }
         }
     }
-    pub fn start(mut self) -> flume::Sender<Message> {
+    pub fn start<S: 'a +  Write + Send>(mut self, mut sender: S) -> flume::Sender<Message> {
         let (tx, rx) = flume::unbounded::<Message>();
+        // let c_rx = rx.clone();
         thread::spawn(move || loop {
             self.process();
-            match rx.recv_timeout(usi::RECEIVE_TIMEOUT) {
-                Ok(msg) => match msg {
-                    Message::UsiOut(cmd) => {
-                        self.send(&cmd);
-                    }
-                    _ => {}
-                },
-                Err(e) => {}
-            }
+
+        });
+        thread::spawn( move || 
+            loop {
+                match rx.recv() {
+                    Ok(msg) => match msg {
+                        Message::UsiOut(cmd) => {
+                            // self.send(&cmd);
+                            if let Some(buf) = cmd.to_usi() {
+                                log::trace!("--> {}", common::to_hex_string(&buf));
+                                match sender.write_all(&buf) {
+                                    Ok(()) => {},
+                                    Err(ref e) => {
+                                        log::warn!("Failed to write to port : {}", e);
+                                        // return Err(String::from(e.to_string()))
+                                    },
+                                }
+                            }
+                        }
+                        _ => {}
+                    },
+                    Err(e) => {}
+                }            
         });
         tx
     }
 }
 
-impl<'a, T: Read + Write + Send> UsiSender for Port<'a, T> {
-    fn send(&mut self, cmd: &OutMessage) -> std::result::Result<(), String> {
-        if let Some(buf) = cmd.to_usi() {
-            log::trace!("--> {}", common::to_hex_string(&buf));
-            match self.channel.write_all(&buf) {
-                Ok(()) => return Ok(()),
-                Err(ref e) => return Err(String::from(e.to_string())),
-            }
-        }
-        return Err(String::from("Invalid UsiCommand"));
-    }
-}
+// impl<'a, T: Read + Send, S: Write + Send> UsiSender for Port<'a, T, S> {
+//     fn send(&mut self, cmd: &OutMessage) -> std::result::Result<(), String> {
+//         if let Some(buf) = cmd.to_usi() {
+//             log::trace!("--> {}", common::to_hex_string(&buf));
+//             match self.sender.write_all(&buf) {
+//                 Ok(()) => return Ok(()),
+//                 Err(ref e) => return Err(String::from(e.to_string())),
+//             }
+//         }
+//         return Err(String::from("Invalid UsiCommand"));
+//     }
+// }

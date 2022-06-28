@@ -15,10 +15,10 @@ use packet::buffer::Buffer;
 use futures::{stream::FuturesUnordered, StreamExt, future};
 
 use futures::{SinkExt, channel::mpsc::UnboundedReceiver};
-use pnet::packet::{ipv6::MutableIpv6Packet, ipv4::MutableIpv4Packet, ip::IpNextHeaderProtocols};
-use tokio::{time::{self, Duration}, pin, sync::mpsc, task::JoinHandle, io::AsyncReadExt, io::AsyncWriteExt};
+use tokio::{time::{self, Duration, sleep}, pin, sync::mpsc, task::JoinHandle, io::AsyncReadExt, io::AsyncWriteExt};
 use tokio_util::codec::{Decoder, FramedRead};
 use tokio::io;
+
 
 use std::sync::atomic::Ordering;
 
@@ -87,8 +87,8 @@ impl TunDevice {
         .address(ipv4_addr)
         .netmask("255.255.0.0".parse().unwrap())            // if name is empty, then it is set by kernel.
         .tap(false)
-        .mtu(1280)          // false (default): TUN, true: TAP.
-        .packet_info(true)  // false: IFF_NO_PI, default is true.
+        .mtu(1220)          // false (default): TUN, true: TAP.
+        .packet_info(false)  // false: IFF_NO_PI, default is true.
         .up()                // or set it up manually using `sudo ip link set <tun-name> up`.
         .try_build().unwrap(); //TODO
         
@@ -105,9 +105,9 @@ impl TunDevice {
             loop {                
                 match tokio::time::timeout(Duration::from_millis(5000), reader.read(&mut buf)).await {
                     Ok(r_size) => {
-                        log::trace!("Tun reader received packet {:?}", r_size);
+                        log::trace!("Tun reader received packet {:?} : {:?}", r_size, buf);
                         if let Ok(size) = r_size {  
-                            let pkt = ip::v4::Packet::new(&buf[..size]);                          
+                            let pkt = ip::v4::Packet::new(&buf[..size]);
                             match pkt {
                                 Ok(packet) => {
                                     log::trace!("ipv4 : {:?}", packet);
@@ -168,7 +168,6 @@ impl TunDevice {
                     }
                     None => {
                         log::warn!("writer : Failed to receive network message");
-                        break;
                     },                    
                 }
             }
@@ -187,10 +186,12 @@ impl TunDevice {
         self,
         short_addr: u16, mut rx: tokio::sync::mpsc::UnboundedReceiver<TunMessage>
     ) {
+        use tokio::time::{Instant, sleep};
+
         let ipv4 = NetworkManager::ipv4_from_short_addr(short_addr);
         let mut config = tun::Configuration::default();
 
-        config.mtu(1280).address(&ipv4).netmask((255, 255, 0, 0)).up();
+        config.mtu(1220).address(&ipv4).netmask((255, 255, 0, 0)).up();
 
         let dev = tun::create_as_async(&config).unwrap();
         
@@ -245,12 +246,13 @@ impl TunDevice {
         let f2 = tokio::task::spawn(async move {
             log::trace!("spawning packet writer");
             loop {
+                
                 match rx.recv().await {
                     Some(msg) => {
                         log::trace!("Tun writer, writing packet : {:?}", msg);
                         match msg.get_payload() {
                             TunPayload::Data(packet) => {
-                                log::trace!("Tun writer, writing packet : {:?}, len {}", packet, packet.len());
+                                
                                 match writer.send(TunPacket::new(packet)).await {
                                     Ok(_) => log::trace!("ipv4 msg sent"),
                                     Err(e) => log::warn!("Failed to write msg : {:?}", e),
@@ -311,7 +313,7 @@ impl NetworkManager {
     pub fn ipv4_from_short_addr(short_addr: u16) -> Ipv4Addr {
         let s = short_addr + 1;
         let b = s.to_be_bytes();
-        Ipv4Addr::new(10u8, 0u8, b[0], b[1]) //TODO parameterize
+        Ipv4Addr::new(10u8, 1u8, b[0], b[1]) //TODO parameterize
     }
     pub fn short_addr_from_ipv4 (ipv4: &Ipv4Addr) -> u16 {
         let o = ipv4.octets();        
@@ -349,9 +351,10 @@ impl NetworkManager {
     pub fn ipv6_from_ipv4 (pan_id: u16, ipv4_pkt: ip::v4::Packet<Vec<u8>>) -> Result<Vec<u8>, packet::Error> {
         let dst = Self::ipv6_addr_from_ipv4_addr(pan_id,&ipv4_pkt.destination());
         let src = Self::ipv6_addr_from_ipv4_addr(pan_id, &ipv4_pkt.source());
-        
+        let traffic_class = Self::dscp_ecn_to_traffic_class(ipv4_pkt.dscp(), ipv4_pkt.ecn());
+        log::trace!("***** setting traffic class to {}", traffic_class);
         let v = ip::v6::Builder::default()
-            .traffic_class(Self::dscp_ecn_to_traffic_class(ipv4_pkt.dscp(), ipv4_pkt.ecn()))?
+            .traffic_class(traffic_class)?
             .flow_label(0)?//TODO, 
             .payload_length(ipv4_pkt.payload().len() as u16)?
             .next_header(ipv4_pkt.protocol().into())?
@@ -360,17 +363,6 @@ impl NetworkManager {
             .destination(dst)?
             .payload(ipv4_pkt.payload())?
             .build()?;
-            let mut new_packet_buffer = [0u8; 1280];
-            let mut ipv6_packet = MutableIpv6Packet::new(&mut new_packet_buffer).unwrap();
-            ipv6_packet.set_traffic_class(Self::dscp_ecn_to_traffic_class(ipv4_pkt.dscp(), ipv4_pkt.ecn()));
-            ipv6_packet.set_flow_label(0);
-            ipv6_packet.set_payload_length(ipv4_pkt.payload().len().try_into().unwrap());
-            let p:u8 = ipv4_pkt.protocol().into();
-            ipv6_packet.set_next_header(pnet::packet::ip::IpNextHeaderProtocol(p));
-            ipv6_packet.set_hop_limit(ipv4_pkt.ttl());
-            ipv6_packet.set_source(src);
-            ipv6_packet.set_destination(dst);
-            ipv6_packet.set_payload(ipv4_pkt.payload());
 
 
         Ok(v)
@@ -401,27 +393,18 @@ impl NetworkManager {
                 log::trace!("-->ipv4_from_ipv6 : tcp --");
                 log::trace!("-->ipv4_from_ipv6 : ipv6 payload : {:?}", ipv6_pkt.payload());
                 let (ip, tcp) = ipv6_pkt.split();
-                // let mut tcp = tcp::Packet::unchecked(ipv6_pkt.payload());
+                let mut tcp = tcp::Packet::unchecked(ipv6_pkt.payload());
                 // tcp.set_window(1280);
                 log::trace!("-->ipv4_from_ipv6 : tcp {:?}", tcp);
-                let mut new_packet_buffer = [0u8; 1280];
-                let mut ipv4_packet = MutableIpv4Packet::new(&mut new_packet_buffer).unwrap();                    
-                ipv4_packet.set_version(4);
-                ipv4_packet.set_header_length(5);
-                ipv4_packet.set_total_length(20 + ipv6_pkt.payload_length());        
-                ipv4_packet.set_dscp(dscp);
-                ipv4_packet.set_ecn(ecn);
-                ipv4_packet.set_source(src);
-                ipv4_packet.set_destination(dst);
-                ipv4_packet.set_ttl(ipv6_pkt.hop_limit());
-                ipv4_packet.set_next_level_protocol(IpNextHeaderProtocols::Tcp);                
-                ipv4_packet.set_payload(ipv6_pkt.payload());
-                // let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
-                // .source(src)?.destination(dst)?
-                // .ttl(ipv6_pkt.hop_limit())?
-                // .tcp()?.source(tcp.source())?.destination(tcp.destination())?
-                // .sequence(tcp.sequence())?.acknowledgment(tcp.acknowledgment())?
-                // .window(1280)?.pointer(tcp.pointer())?.flags(tcp.flags())?.payload(tcp.payload())?.build();
+                
+                
+                let v = ip::v4::Builder::default().id(0)?.dscp(dscp)?.ecn(ecn)?
+                .source(src)?.destination(dst)?
+                .ttl(ipv6_pkt.hop_limit())?.flags(ip::v4::flag::DONT_FRAGMENT)?.offset(0)?                
+                .tcp()?.source(tcp.source())?.destination(tcp.destination())?
+                // .window(1500)?
+                .sequence(tcp.sequence())?.acknowledgment(tcp.acknowledgment())?
+                .pointer(tcp.pointer())?.flags(tcp.flags())?.payload(tcp.payload())?.build();
                 // let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
                 // .source(src)?.destination(dst)?
                 // .ttl(ipv6_pkt.hop_limit())?.tcp()?.payload(tcp)?.build();
@@ -429,8 +412,7 @@ impl NetworkManager {
                 // if let Ok(pkt_data) = &v {
                 //     log::trace!("-->ipv4_from_ipv6 : result : {:?}", ip::v4::Packet::new(pkt_data));
                 // }
-                use pnet::packet::Packet;
-                return Ok(ipv4_packet.packet().split_at(ipv4_packet.get_total_length() as usize).0.to_vec());
+                return v;
                 
             },
             Protocol::Icmp => {
@@ -587,7 +569,8 @@ impl NetworkManager {
                                                 match Self::ipv6_from_ipv4(self.pan_id, ipv4_pkt) {
                                                     Ok(ipv6_pkt) => {
                                                         log::trace!("Sending ipv6 packet to G3 {:?}", ipv6_pkt);
-                                                        let data_request = AdpDataRequest::new(rand::thread_rng().gen(), &ipv6_pkt, true, 100);
+                                                        let data_request = AdpDataRequest::new(rand::thread_rng().gen(), &ipv6_pkt, true, 0);
+                                                        // sleep(Duration::from_millis(100)).await;
                                                         self.cmd_tx.send(usi::Message::UsiOut(data_request.into()));
                                                     },
                                                     Err(e) => {
@@ -619,10 +602,11 @@ impl NetworkManager {
                 }
             }
         });
-        futures.push(f1);
-        futures.push(f2);
-        while let Some(f) = futures.next().await {
+        // futures.push(f1);
+        // futures.push(f2);
+        // while let Some(f) = futures.next().await {
             
-        }
+        // }
+        futures::future::join_all([f1, f2]).await;
     }
 }

@@ -70,6 +70,7 @@ fn main() {
         .open()
         .expect("Failed to open port {}");
 
+    let mut tx_port = port.try_clone().unwrap();
     let (app_tx, app_rx) = flume::unbounded::<Message>();
     // let (usi_tx, usi_rx) = flume::unbounded::<Message>();
     // let (net_tx, net_rx) = flume::unbounded::<adp::Message>();
@@ -78,46 +79,47 @@ fn main() {
     let sender = app_tx.clone();
     let mut usi = usi::Port::new(port);
     usi.add_listener(sender);
-    let usi_tx = usi.start();
+    let usi_tx = usi.start(tx_port);
 
     let cmd_tx = usi_tx.clone();
-
-    tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .unwrap()
-        .block_on(async {
-            let network_manager = network_manager::NetworkManager::new(s.g3.pan_id, usi_tx);
-            let (tx, rx) = flume::unbounded::<adp::Message>();
+    let (tx, rx) = flume::unbounded::<adp::Message>();
             
-            log::trace!("Network Manager started ...");
-            let t2 = thread::spawn(move || {
-                let message_handler: Option<Box<dyn MessageHandler>>;
-                if is_coordinator {
-                    message_handler = Some(Box::new(coord::Coordinator::new(cmd_tx, tx)));
-                } else {
-                    message_handler = Some(Box::new(modem::Modem::new(cmd_tx, tx)));
-                }
-                if let Some(mut handler) = message_handler {
-                    loop {
-                        match app_rx.recv() {
-                            Ok(msg) => {
-                                if !handler.process(msg) {
-                                    break;
-                                }
-                            }
-                            Err(e) => {}
+    log::trace!("Network Manager started ...");
+    let t2 = thread::spawn(move || {
+        let message_handler: Option<Box<dyn MessageHandler>>;
+        if is_coordinator {
+            message_handler = Some(Box::new(coord::Coordinator::new(cmd_tx, tx)));
+        } else {
+            message_handler = Some(Box::new(modem::Modem::new(cmd_tx, tx)));
+        }
+        if let Some(mut handler) = message_handler {
+            loop {
+                match app_rx.recv() {
+                    Ok(msg) => {
+                        if !handler.process(msg) {
+                            break;
                         }
                     }
+                    Err(e) => {}
                 }
-            });
-            let system_tx = app_tx.clone();
+            }
+        }
+    });
+    let system_tx = app_tx.clone();
             let result = system_tx.send(Message::SystemStartup);
             log::trace!("Sending system startup message result : {:?}", result);
             let system_handle = thread::spawn(move || loop {
                 system_tx.send(Message::HeartBeat(SystemTime::now()));
                 thread::sleep(TIMER_RESOLUTION);
             });
+    tokio::runtime::Builder::new_multi_thread().worker_threads(10)
+        .enable_all()
+        .build()        
+        .unwrap()
+        .block_on(async {
+            let network_manager = network_manager::NetworkManager::new(s.g3.pan_id, usi_tx);
+ 
+            
            
             network_manager.start(rx).await;
         });
