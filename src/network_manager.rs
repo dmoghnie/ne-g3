@@ -15,9 +15,10 @@ use packet::buffer::Buffer;
 use futures::{stream::FuturesUnordered, StreamExt, future};
 
 use futures::{SinkExt, channel::mpsc::UnboundedReceiver};
-use tokio::{time::{self, Duration}, pin, sync::mpsc, task::JoinHandle, io::AsyncReadExt, io::AsyncWriteExt};
+use tokio::{time::{self, Duration, sleep}, pin, sync::mpsc, task::JoinHandle, io::AsyncReadExt, io::AsyncWriteExt};
 use tokio_util::codec::{Decoder, FramedRead};
 use tokio::io;
+
 
 use std::sync::atomic::Ordering;
 
@@ -185,6 +186,8 @@ impl TunDevice {
         self,
         short_addr: u16, mut rx: tokio::sync::mpsc::UnboundedReceiver<TunMessage>
     ) {
+        use tokio::time::{Instant, sleep};
+
         let ipv4 = NetworkManager::ipv4_from_short_addr(short_addr);
         let mut config = tun::Configuration::default();
 
@@ -243,6 +246,7 @@ impl TunDevice {
         let f2 = tokio::task::spawn(async move {
             log::trace!("spawning packet writer");
             loop {
+                
                 match rx.recv().await {
                     Some(msg) => {
                         log::trace!("Tun writer, writing packet : {:?}", msg);
@@ -565,7 +569,8 @@ impl NetworkManager {
                                                 match Self::ipv6_from_ipv4(self.pan_id, ipv4_pkt) {
                                                     Ok(ipv6_pkt) => {
                                                         log::trace!("Sending ipv6 packet to G3 {:?}", ipv6_pkt);
-                                                        let data_request = AdpDataRequest::new(rand::thread_rng().gen(), &ipv6_pkt, true, 100);
+                                                        let data_request = AdpDataRequest::new(rand::thread_rng().gen(), &ipv6_pkt, true, 0);
+                                                        sleep(Duration::from_millis(500)).await;
                                                         self.cmd_tx.send(usi::Message::UsiOut(data_request.into()));
                                                     },
                                                     Err(e) => {
