@@ -404,7 +404,7 @@ impl NetworkManager {
                 .tcp()?.source(tcp.source())?.destination(tcp.destination())?
                 // .window(50000)?
                 .sequence(tcp.sequence())?.acknowledgment(tcp.acknowledgment())?
-                .pointer(tcp.pointer())?.flags(tcp.flags())?.options(tcp.raw_options())?.payload(tcp.payload())?.build();
+                .pointer(tcp.pointer())?.flags(tcp.flags())?.payload(tcp.payload())?.build();
                 // let v = ip::v4::Builder::default().id(0x42)?.dscp(dscp)?.ecn(ecn)?
                 // .source(src)?.destination(dst)?
                 // .ttl(ipv6_pkt.hop_limit())?.tcp()?.payload(tcp)?.build();
