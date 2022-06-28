@@ -82,9 +82,9 @@ fn main() {
 
     let cmd_tx = usi_tx.clone();
 
-    tokio::runtime::Builder::new_multi_thread()
+    tokio::runtime::Builder::new_multi_thread().worker_threads(4)
         .enable_all()
-        .build()
+        .build()        
         .unwrap()
         .block_on(async {
             let network_manager = network_manager::NetworkManager::new(s.g3.pan_id, usi_tx);
