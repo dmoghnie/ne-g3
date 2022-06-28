@@ -105,7 +105,7 @@ impl TunDevice {
             loop {                
                 match tokio::time::timeout(Duration::from_millis(5000), reader.read(&mut buf)).await {
                     Ok(r_size) => {
-                        log::trace!("Tun reader received packet {:?} : {}", r_size, buf);
+                        log::trace!("Tun reader received packet {:?} : {:?}", r_size, buf);
                         if let Ok(size) = r_size {  
                             let pkt = ip::v4::Packet::new(&buf[..size]);
                             match pkt {
