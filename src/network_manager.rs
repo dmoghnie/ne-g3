@@ -313,7 +313,7 @@ impl NetworkManager {
     pub fn ipv4_from_short_addr(short_addr: u16) -> Ipv4Addr {
         let s = short_addr + 1;
         let b = s.to_be_bytes();
-        Ipv4Addr::new(10u8, 0u8, b[0], b[1]) //TODO parameterize
+        Ipv4Addr::new(10u8, 1u8, b[0], b[1]) //TODO parameterize
     }
     pub fn short_addr_from_ipv4 (ipv4: &Ipv4Addr) -> u16 {
         let o = ipv4.octets();        
