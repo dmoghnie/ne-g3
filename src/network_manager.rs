@@ -570,7 +570,7 @@ impl NetworkManager {
                                                     Ok(ipv6_pkt) => {
                                                         log::trace!("Sending ipv6 packet to G3 {:?}", ipv6_pkt);
                                                         let data_request = AdpDataRequest::new(rand::thread_rng().gen(), &ipv6_pkt, true, 0);
-                                                        sleep(Duration::from_millis(500)).await;
+                                                        sleep(Duration::from_millis(100)).await;
                                                         self.cmd_tx.send(usi::Message::UsiOut(data_request.into()));
                                                     },
                                                     Err(e) => {
