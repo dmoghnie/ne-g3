@@ -111,14 +111,14 @@ impl TunDevice {
                             match pkt {
                                 Ok(packet) => {
                                     log::trace!("ipv4 : {:?}", packet);
-                                    self.listener.send(TunMessage::new(
+                                    self.listener.send_async(TunMessage::new(
                                         self.short_addr,
                                         TunPayload::Data(packet.as_ref().to_vec()),
                                     )); //TODO check the result
                                 }
                                 Err(e) => {
                                     log::warn!("TunDevice error reading {}", e);
-                                    self.listener.send(TunMessage::new(
+                                    self.listener.send_async(TunMessage::new(
                                         self.short_addr,
                                         TunPayload::Error(()),
                                     ));
@@ -571,7 +571,7 @@ impl NetworkManager {
                                                         log::trace!("Sending ipv6 packet to G3 {:?}", ipv6_pkt);
                                                         let data_request = AdpDataRequest::new(rand::thread_rng().gen(), &ipv6_pkt, true, 0);
                                                         // sleep(Duration::from_millis(100)).await;
-                                                        self.cmd_tx.send(usi::Message::UsiOut(data_request.into()));
+                                                        self.cmd_tx.send_async(usi::Message::UsiOut(data_request.into()));
                                                     },
                                                     Err(e) => {
                                                         log::warn!("Failed to convert ipv6 packet to ipv4 packet : {}", e);
