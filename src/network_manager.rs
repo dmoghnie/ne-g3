@@ -602,10 +602,11 @@ impl NetworkManager {
                 }
             }
         });
-        futures.push(f1);
-        futures.push(f2);
-        while let Some(f) = futures.next().await {
+        // futures.push(f1);
+        // futures.push(f2);
+        // while let Some(f) = futures.next().await {
             
-        }
+        // }
+        futures::future::join_all([f1, f2]).await;
     }
 }
