@@ -254,7 +254,7 @@ impl Coordinator {
             let attribute = &MAC_STACK_PARAMETERS[self.mac_param_idx];
             let cmd = request::AdpMacSetRequest::new(attribute.0, attribute.1, &attribute.2);
             if let Err(e) = self.send_cmd(cmd.into()) {
-                log::warn!("Failed to send set parameter {:?}", attribute.0);
+                log::warn!("Failed to send set parameter {:?}, {}", attribute.0, e);
             }
         } else if self.adp_param_idx < ADP_STACK_PARAMETERS.len() {
             let attribute = &ADP_STACK_PARAMETERS[self.adp_param_idx];
@@ -285,7 +285,10 @@ impl Coordinator {
     fn send_cmd(&self, msg: usi::OutMessage) -> Result<(), CoordError> {
         match self.cmd_tx.send(usi::Message::UsiOut(msg)) {
             Ok(_) => Ok(()),
-            Err(e) => Err(CoordError::SendError(e)),
+            Err(e) => {
+                log::warn! ("Send cmd: {}", e);
+                Err(CoordError::SendError(e))
+            },
         }
     }
 }

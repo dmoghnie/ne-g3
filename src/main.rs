@@ -70,6 +70,7 @@ fn main() {
         .open()
         .expect("Failed to open port {}");
 
+    let mut tx_port = port.try_clone().unwrap();
     let (app_tx, app_rx) = flume::unbounded::<Message>();
     // let (usi_tx, usi_rx) = flume::unbounded::<Message>();
     // let (net_tx, net_rx) = flume::unbounded::<adp::Message>();
@@ -78,7 +79,7 @@ fn main() {
     let sender = app_tx.clone();
     let mut usi = usi::Port::new(port);
     usi.add_listener(sender);
-    let usi_tx = usi.start();
+    let usi_tx = usi.start(tx_port);
 
     let cmd_tx = usi_tx.clone();
     let (tx, rx) = flume::unbounded::<adp::Message>();

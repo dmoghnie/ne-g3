@@ -111,14 +111,14 @@ impl TunDevice {
                             match pkt {
                                 Ok(packet) => {
                                     log::trace!("ipv4 : {:?}", packet);
-                                    self.listener.send_async(TunMessage::new(
+                                    self.listener.send(TunMessage::new(
                                         self.short_addr,
                                         TunPayload::Data(packet.as_ref().to_vec()),
                                     )); //TODO check the result
                                 }
                                 Err(e) => {
                                     log::warn!("TunDevice error reading {}", e);
-                                    self.listener.send_async(TunMessage::new(
+                                    self.listener.send(TunMessage::new(
                                         self.short_addr,
                                         TunPayload::Error(()),
                                     ));
