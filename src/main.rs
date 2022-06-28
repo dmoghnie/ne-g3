@@ -111,7 +111,7 @@ fn main() {
                 system_tx.send(Message::HeartBeat(SystemTime::now()));
                 thread::sleep(TIMER_RESOLUTION);
             });
-    tokio::runtime::Builder::new_multi_thread().worker_threads(4)
+    tokio::runtime::Builder::new_multi_thread().worker_threads(10)
         .enable_all()
         .build()        
         .unwrap()
