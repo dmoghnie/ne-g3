@@ -65,6 +65,10 @@ lazy_static! {
         let s = SETTINGS.read().unwrap();
         s.g3.psk
     };
+    pub static ref TUN_NAME: String = {
+        let s = SETTINGS.read().unwrap();
+        s.network.tun.clone()
+    };
 
 
 }
@@ -94,7 +98,14 @@ pub struct Serial {
 #[allow(unused)]
 pub struct Settings {
     pub g3: G3,
-    pub serial: Serial
+    pub serial: Serial,
+    pub network: Network
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(unused)]
+pub struct Network {
+    pub tun: String,
 }
 
 impl Settings {

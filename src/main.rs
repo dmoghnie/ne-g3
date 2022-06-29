@@ -83,8 +83,12 @@ fn main() {
 
     let cmd_tx = usi_tx.clone();
     let (tx, rx) = flume::unbounded::<adp::Message>();
-            
+    
+    let network_manager = network_manager::NetworkManager::new(s.g3.pan_id, usi_tx);
+
+    network_manager.start(rx);
     log::trace!("Network Manager started ...");
+    
     let t2 = thread::spawn(move || {
         let message_handler: Option<Box<dyn MessageHandler>>;
         if is_coordinator {
@@ -106,23 +110,13 @@ fn main() {
         }
     });
     let system_tx = app_tx.clone();
-            let result = system_tx.send(Message::SystemStartup);
-            log::trace!("Sending system startup message result : {:?}", result);
-            let system_handle = thread::spawn(move || loop {
-                system_tx.send(Message::HeartBeat(SystemTime::now()));
-                thread::sleep(TIMER_RESOLUTION);
-            });
-    tokio::runtime::Builder::new_multi_thread().worker_threads(10)
-        .enable_all()
-        .build()        
-        .unwrap()
-        .block_on(async {
-            let network_manager = network_manager::NetworkManager::new(s.g3.pan_id, usi_tx);
- 
-            
-           
-            network_manager.start(rx).await;
-        });
-        
-    // system_handle.join().unwrap();
+    let result = system_tx.send(Message::SystemStartup);
+    log::trace!("Sending system startup message result : {:?}", result);
+    let system_handle = thread::spawn(move || loop {
+        system_tx.send(Message::HeartBeat(SystemTime::now()));
+        thread::sleep(TIMER_RESOLUTION);
+    });
+    
+
+    system_handle.join().unwrap();
 }
