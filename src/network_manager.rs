@@ -337,6 +337,7 @@ impl NetworkManager {
         packet.set_traffic_class(traffic_class);
         packet.set_flow_label(0); //TODO
         
+        
         packet.set_payload_len(ipv4_pkt.payload().len().try_into().unwrap());
         packet.set_next_header(ipv4_pkt.next_header());
         packet.set_hop_limit(ipv4_pkt.hop_limit());
