@@ -4,7 +4,7 @@ use std::{
     io::Error,
     net::{Ipv4Addr, Ipv6Addr},
     sync::{atomic::AtomicBool, Arc},
-    thread, vec,
+    thread::{self, sleep_ms}, vec,
 };
 
 use bytes::{Buf, BytesMut};
@@ -229,8 +229,8 @@ impl TunDevice {
                             }
                             TunPayload::Icmp(data) => {
                                 log::trace!("TUN interface sending ICMP {:?}", data);
-                                let tcp_socket = sockets.get_mut::<raw::Socket>(icmp_raw_handle);
-                                match tcp_socket.send_slice(&data) {
+                                let icmp_socket = sockets.get_mut::<raw::Socket>(icmp_raw_handle);
+                                match icmp_socket.send_slice(&data) {
                                     Ok(_) => log::trace!("TUN interface sent ICMP data"),
                                     Err(e) => {
                                         log::warn!("TUN interface failed ot send ICMP {:?}", e);
@@ -249,7 +249,7 @@ impl TunDevice {
                     Err(e) => {}
                 }
 
-                phy_wait(fd, Some(Duration::from_millis(10))).expect("wait error");
+                phy_wait(fd, Some(Duration::from_millis(100))).expect("wait error");
             }
         });
     }
@@ -529,6 +529,7 @@ impl NetworkManager {
                     }
                     Err(_) => {}
                 }
+                sleep_ms(100);//TODO, spin threads and recv instead of try_recv
             }
         });
     }
