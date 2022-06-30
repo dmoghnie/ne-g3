@@ -344,7 +344,7 @@ impl NetworkManager {
             Self::pan_id_and_short_addr_from_ipv6(&ipv6_pkt.dst_addr().into());
         let payload_len = packet.total_len().clone() as usize;
         Ok((
-            packet.next_header(),
+            ipv6_pkt.next_header(),
             packet.into_inner()[..payload_len].to_vec(),
             pan_id,
             short_addr,
