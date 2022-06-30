@@ -139,7 +139,9 @@ impl TunDevice {
                 for (handle, s) in sockets.iter_mut() {
                     if let Some(s) = raw::Socket::downcast_mut(s){
                         let protocol = s.ip_protocol().clone();
+                        
                         if s.can_recv() {
+                            log::trace!("socket {} : {} can received", s.ip_version(), s.ip_protocol());
                             match s.recv() {
                                 Ok(buf) => match protocol {
                                     IpProtocol::HopByHop => {}
@@ -395,8 +397,8 @@ impl NetworkManager {
                                         if let Some(tx) = self.tun_devices.get(&short_addr_dst) {
                                             log::trace!("found sender for short addr {} -- sending TunPayload::Data", short_addr_dst);
                                             let payload = match protocol {
-                                                Tcp => Some(TunPayload::Tcp(pkt)),
-                                                Udp => Some(TunPayload::Udp(pkt)),
+                                                IpProtocol::Tcp => Some(TunPayload::Tcp(pkt)),
+                                                IpProtocol::Udp => Some(TunPayload::Udp(pkt)),
                                                 _ => {
                                                     log::warn!("ipv4_from_ipv6 protocol not implemented {}", protocol);
                                                     None
