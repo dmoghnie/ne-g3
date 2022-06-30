@@ -249,7 +249,7 @@ impl TunDevice {
                     Err(e) => {}
                 }
 
-                phy_wait(fd, Some(Duration::from_millis(100))).expect("wait error");
+                phy_wait(fd, Some(Duration::from_millis(10))).expect("wait error");
             }
         });
     }
@@ -545,7 +545,7 @@ impl NetworkManager {
                     }
                     Err(_) => {}
                 }
-                sleep_ms(100);//TODO, spin threads and recv instead of try_recv
+                sleep_ms(10);//TODO, spin threads and recv instead of try_recv
             }
         });
     }
