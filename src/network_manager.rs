@@ -16,7 +16,7 @@ use packet::buffer::Buffer;
 
 use crate::app_config;
 use smoltcp::socket::{tcp, udp};
-use smoltcp::wire::{self, IpProtocol, Ipv4Packet, Ipv6Packet};
+use smoltcp::wire::{self, IpProtocol, Ipv4Packet, Ipv6Packet, UdpPacket};
 use std::sync::atomic::Ordering;
 
 #[cfg(target_os = "macos")]
@@ -336,7 +336,7 @@ impl NetworkManager {
         packet.set_version(6);
         packet.set_traffic_class(traffic_class);
         packet.set_flow_label(0); //TODO
-
+        
         packet.set_payload_len(ipv4_pkt.payload().len().try_into().unwrap());
         packet.set_next_header(ipv4_pkt.next_header());
         packet.set_hop_limit(ipv4_pkt.hop_limit());
@@ -347,9 +347,10 @@ impl NetworkManager {
         let payload_len = packet.total_len().clone();
         Ok(packet.into_inner()[..payload_len].to_vec())
     }
-    pub fn ipv4_from_ipv6(buf: &Vec<u8>) -> Result<(IpProtocol, Vec<u8>, u16, u16), wire::Error> {
+
+    pub fn ipv4_from_ipv6(buf: &mut Vec<u8>) -> Result<(IpProtocol, Vec<u8>, u16, u16), wire::Error> {
         log::trace!("-->ipv4_from_ipv6 : {:?}", buf);
-        let ipv6_pkt = Ipv6Packet::new_checked(buf)?;
+        let mut ipv6_pkt = Ipv6Packet::new_checked(buf)?;
         let dst = Self::ipv4_addr_from_ipv6(ipv6_pkt.dst_addr().into());
         let src = Self::ipv4_addr_from_ipv6(ipv6_pkt.src_addr().into());
         let (dscp, ecn) = Self::traffic_class_to_dscp_ecn(ipv6_pkt.traffic_class());
@@ -371,8 +372,22 @@ impl NetworkManager {
         packet.set_next_header(ipv6_pkt.next_header());
         packet.set_src_addr(src.into());
         packet.set_dst_addr(dst.into());
-        packet.fill_checksum();
-        packet.payload_mut().copy_from_slice(ipv6_pkt.payload());
+        // packet.fill_checksum();
+
+        match ipv6_pkt.next_header() {
+
+            IpProtocol::Udp => {
+                let mut udp_pkt = UdpPacket::new_checked(ipv6_pkt.payload_mut())?;
+                udp_pkt.set_checksum(0);
+                packet.payload_mut().copy_from_slice(udp_pkt.into_inner());
+                packet.set_checksum(0);
+            },
+            _ => {
+                packet.payload_mut().copy_from_slice(ipv6_pkt.payload_mut());
+            }
+        }
+
+        
         let (pan_id, short_addr) =
             Self::pan_id_and_short_addr_from_ipv6(&ipv6_pkt.dst_addr().into());
         let payload_len = packet.total_len().clone() as usize;
@@ -425,7 +440,7 @@ impl NetworkManager {
                         log::trace!("Network manager received message : {:?}", msg);
                         match msg {
                             adp::Message::AdpG3DataEvent(g3_data) => {
-                                match Self::ipv4_from_ipv6(&g3_data.nsdu) {
+                                match Self::ipv4_from_ipv6(&mut g3_data.nsdu.clone()) {
                                     Ok((protocol, pkt, pan_id, short_addr_dst)) => {
                                         if let Some(tx) = self.tun_devices.get(&short_addr_dst) {
                                             log::trace!("found sender for short addr {} -- sending TunPayload::Data", short_addr_dst);
