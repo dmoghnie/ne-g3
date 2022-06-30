@@ -356,16 +356,17 @@ impl NetworkManager {
 
         let mut bytes = vec![0xa5; 1280];
         let mut packet = Ipv4Packet::new_unchecked(&mut bytes);
+        
         packet.set_version(4);
         packet.set_header_len(20);
-        packet.clear_flags();
         packet.set_dscp(dscp);
         packet.set_ecn(ecn);
         packet.set_total_len(20 + ipv6_pkt.payload_len());
-        packet.set_ident(0x102);
+        packet.set_ident(0);
+        packet.clear_flags();
         packet.set_more_frags(false);
         packet.set_dont_frag(true);
-
+        packet.set_frag_offset(0);
         packet.set_hop_limit(ipv6_pkt.hop_limit());
         packet.set_next_header(ipv6_pkt.next_header());
         packet.set_src_addr(src.into());
