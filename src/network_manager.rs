@@ -328,7 +328,7 @@ impl NetworkManager {
         let src = Self::ipv6_addr_from_ipv4_addr(pan_id, &ipv4_pkt.src_addr().into());
         let traffic_class = Self::dscp_ecn_to_traffic_class(ipv4_pkt.dscp(), ipv4_pkt.ecn());
 
-        let mut bytes = vec![0xff; 1280];
+        let mut bytes = vec![0xff; 1520];
         let mut packet = Ipv6Packet::new_unchecked(&mut bytes);
         // Version, Traffic Class, and Flow Label are not
         // byte aligned. make sure the setters and getters
@@ -355,7 +355,7 @@ impl NetworkManager {
         let src = Self::ipv4_addr_from_ipv6(ipv6_pkt.src_addr().into());
         let (dscp, ecn) = Self::traffic_class_to_dscp_ecn(ipv6_pkt.traffic_class());
 
-        let mut bytes = vec![0xa5; 1280];
+        let mut bytes = vec![0xa5; 1520];
         let mut packet = Ipv4Packet::new_unchecked(&mut bytes);
         
         packet.set_version(4);
