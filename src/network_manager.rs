@@ -12,7 +12,7 @@ use bytes::{Buf, BytesMut};
 use config::Config;
 
 use futures::{future, stream::FuturesUnordered, StreamExt};
-use packet::buffer::Buffer;
+use packet::{buffer::Buffer, ip};
 
 use crate::app_config;
 use smoltcp::socket::{tcp, udp};
@@ -321,6 +321,25 @@ impl NetworkManager {
         (traffic_class >> 2, traffic_class & 0b0000_0011)
     }
 
+    fn ipv6_to_tun_payload_and_short_addr(buf: &Vec<u8>) -> Option<(TunPayload, u16),> {
+        if let Ok(ref mut ipv6_pkt) = Ipv6Packet::new_checked(buf){
+            let (_, short_addr) = Self::pan_id_and_short_addr_from_ipv6(&ipv6_pkt.dst_addr().into());
+            match ipv6_pkt.next_header() {
+    
+                IpProtocol::Icmp => Some((TunPayload::Icmp(buf.to_vec()), short_addr)),
+    
+                IpProtocol::Tcp => Some((TunPayload::Tcp(buf.to_vec()), short_addr)),
+                IpProtocol::Udp => Some((TunPayload::Udp(buf.to_vec()), short_addr)),
+                _ => {
+                     None
+                }
+            }
+        
+        }
+        else {
+        None
+        }
+    }
     pub fn ipv6_from_ipv4(pan_id: u16, buf: &Vec<u8>) -> Result<Vec<u8>, wire::Error> {
         let ipv4_pkt = Ipv4Packet::new_checked(buf)?;
 
@@ -441,39 +460,26 @@ impl NetworkManager {
                         log::trace!("Network manager received message : {:?}", msg);
                         match msg {
                             adp::Message::AdpG3DataEvent(g3_data) => {
-                                match Self::ipv4_from_ipv6(&mut g3_data.nsdu.clone()) {
-                                    Ok((protocol, pkt, pan_id, short_addr_dst)) => {
-                                        if let Some(tx) = self.tun_devices.get(&short_addr_dst) {
-                                            log::trace!("found sender for short addr {} -- sending TunPayload::Data", short_addr_dst);
-                                            let payload = match protocol {
-                                                IpProtocol::Tcp => Some(TunPayload::Tcp(pkt)),
-                                                IpProtocol::Udp => Some(TunPayload::Udp(pkt)),
-                                                IpProtocol::Icmp => Some(TunPayload::Icmp(pkt)),
-                                                _ => {
-                                                    log::warn!("ipv4_from_ipv6 protocol not implemented {}", protocol);
-                                                    None
-                                                }
-                                            };
-                                            if let Some(payload) = payload {
-                                                match tx.send(TunMessage {
-                                                    short_addr: short_addr_dst,
-                                                    payload: payload,
-                                                }) {
-                                                    Ok(_) => {}
-                                                    Err(e) => {
-                                                        log::warn!(
-                                                        "Failed to send ipv4 packet to TUN : {}",
-                                                        e
-                                                    )
-                                                    }
+                                if let Some((payload, short_addr)) = 
+                                    Self::ipv6_to_tun_payload_and_short_addr(&g3_data.nsdu) {
+                                        if let Some(tx) = self.tun_devices.get(&short_addr) {
+                                            log::trace!("found sender for short addr {} -- sending TunPayload::Data", short_addr);
+                                            match tx.send(TunMessage {
+                                                short_addr: short_addr,
+                                                payload: payload,
+                                            }) {
+                                                Ok(_) => {}
+                                                Err(e) => {
+                                                    log::warn!(
+                                                    "Failed to send ipv4 packet to TUN : {}",
+                                                    e
+                                                )
                                                 }
                                             }
+
                                         }
-                                    }
-                                    Err(_) => {
-                                        log::warn!("Failed to transform message to ipv4");
-                                    }
                                 }
+
                             }
                             adp::Message::AdpG3NetworkStartResponse(network_start_response) => {
                                 if network_start_response.status == EAdpStatus::G3_SUCCESS {
@@ -517,25 +523,14 @@ impl NetworkManager {
                     Ok(msg) => {
                         match msg.payload {
                             TunPayload::Udp(pkt) | TunPayload::Tcp(pkt) | TunPayload::Icmp(pkt) => {
-                                match Self::ipv6_from_ipv4(self.pan_id, &pkt) {
-                                    Ok(pkt) => {
-                                        log::trace!("Sending ipv6 packet to G3 {:?}", pkt);
-                                        let data_request = AdpDataRequest::new(
-                                            rand::thread_rng().gen(),
-                                            &pkt,
-                                            true,
-                                            0,
-                                        );
-                                        // sleep(Duration::from_millis(100)).await;
-                                        self.cmd_tx.send(usi::Message::UsiOut(data_request.into()));
-                                    }
-                                    Err(e) => {
-                                        log::warn!(
-                                            "Failed to convert ipv6 packet to ipv4 packet : {}",
-                                            e
-                                        );
-                                    }
-                                }
+                                let data_request = AdpDataRequest::new(
+                                    rand::thread_rng().gen(),
+                                    &pkt,
+                                    true,
+                                    0,
+                                );
+                                self.cmd_tx.send(usi::Message::UsiOut(data_request.into()));
+                                
                             }
                             TunPayload::Stop => { //Should we use this as a notification that the device is stopped or should we have a separate message
                             }
