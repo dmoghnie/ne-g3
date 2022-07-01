@@ -110,7 +110,7 @@ impl TunDevice {
             let tcp_raw_tx_buffer =
                 raw::PacketBuffer::new(vec![raw::PacketMetadata::EMPTY; 2], vec![0; 2560]);
             let tcp_raw_socket = raw::Socket::new(
-                IpVersion::Ipv4,
+                IpVersion::Ipv6,
                 IpProtocol::Tcp,
                 tcp_raw_rx_buffer,
                 tcp_raw_tx_buffer,
@@ -122,7 +122,7 @@ impl TunDevice {
             let udp_raw_tx_buffer =
                 raw::PacketBuffer::new(vec![raw::PacketMetadata::EMPTY; 2], vec![0; 2560]);
             let udp_raw_socket = raw::Socket::new(
-                IpVersion::Ipv4,
+                IpVersion::Ipv6,
                 IpProtocol::Udp,
                 udp_raw_rx_buffer,
                 udp_raw_tx_buffer,
@@ -134,7 +134,7 @@ impl TunDevice {
             let icmp_raw_tx_buffer =
             raw::PacketBuffer::new(vec![raw::PacketMetadata::EMPTY; 2], vec![0; 2560]);
             let icmp_raw_socket = raw::Socket::new(
-            IpVersion::Ipv4,
+            IpVersion::Ipv6,
             IpProtocol::Icmp,
             icmp_raw_rx_buffer,
             icmp_raw_tx_buffer,
