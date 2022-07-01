@@ -348,7 +348,7 @@ where
 
     // pub fn process<T>(&mut self, port: &mut T, listener:&Box<dyn message::MessageListener>) -> Option<Vec<u8>>
     fn process(&mut self) {
-        let mut b = [0; 2048];
+        let mut b = [0; 4096];
 
         match self.receiver.read(&mut b) {
             Ok(t) => {
