@@ -4,19 +4,20 @@ use std::{
     io::Error,
     net::{Ipv4Addr, Ipv6Addr},
     sync::{atomic::AtomicBool, Arc},
-    thread::{self, sleep_ms}, vec,
+    thread::{self, sleep_ms},
+    vec,
 };
 
-use bytes::{Buf, BytesMut};
-
 use config::Config;
-
-use futures::{future, stream::FuturesUnordered, StreamExt};
-use packet::buffer::Buffer;
+use pnet::packet::{
+    ipv4::{Ipv4Flags, Ipv4Packet, MutableIpv4Packet},
+    ipv6::{Ipv6Packet, MutableIpv6Packet},
+    Packet,
+};
+use pnet_macros_support::packet;
 
 use crate::app_config;
-use smoltcp::socket::{tcp, udp};
-use smoltcp::wire::{self, IpProtocol, Ipv4Packet, Ipv6Packet, UdpPacket};
+
 use std::sync::atomic::Ordering;
 
 #[cfg(target_os = "macos")]
@@ -27,14 +28,14 @@ use crate::{
     request::AdpDataRequest,
     usi,
 };
+use pnet_datalink::Channel::Ethernet;
 
 use rand::Rng;
 
 #[derive(Debug)]
 enum TunPayload {
-    Udp(Vec<u8>),
-    Tcp(Vec<u8>),
-    Icmp(Vec<u8>),
+    Data(Vec<u8>),
+
     Stop,
     Error(()), //TODO
 }
@@ -75,181 +76,50 @@ impl TunDevice {
 
     #[cfg(target_os = "linux")]
     pub fn start(self, short_addr: u16, mut rx: flume::Receiver<TunMessage>) {
-        use std::{collections::BTreeMap, os::unix::prelude::AsRawFd};
+        let interfaces = pnet_datalink::interfaces();
+        let interface = interfaces
+            .into_iter()
+            .filter(|iface| iface.name == "tun0")
+            .next()
+            .unwrap();
 
-        use serialport::new;
-        use smoltcp::phy::{wait as phy_wait, RawSocket};
-        use smoltcp::socket::{AnySocket, icmp};
-        use smoltcp::time::Duration;
-        use smoltcp::{
-            iface::{FragmentsCache, InterfaceBuilder, SocketSet},
-            phy::{Medium, TunTapInterface},
-            socket::raw,
-            time::Instant,
-            wire::{IpAddress, IpCidr, IpProtocol, IpVersion, Ipv4Packet},
+        // Create a channel to receive on
+        let (mut net_tx, mut net_rx) = match pnet_datalink::channel(&interface, Default::default())
+        {
+            Ok(Ethernet(tx, rx)) => (tx, rx),
+            Ok(_) => panic!("rs_sender: unhandled channel type"),
+            Err(e) => panic!("rs_sender: unable to create channel: {}", e),
         };
 
-        let ipv4_addr = NetworkManager::ipv4_from_short_addr(short_addr);
-
-        thread::spawn(move || {
-            let mut device = TunTapInterface::new(&app_config::TUN_NAME, Medium::Ip).unwrap();
-            let fd = device.as_raw_fd();
-
-            let ip_addr = IpCidr::new(IpAddress::from(ipv4_addr), 16);
-
-            let mut iface = InterfaceBuilder::new()
-                .ip_addrs([ip_addr])
-                // .sixlowpan_fragments_cache(FragmentsCache::new(vec![], BTreeMap::new()))
-                .ipv4_fragments_cache(FragmentsCache::new(vec![], BTreeMap::new()))
-                .finalize(&mut device);
-
-            let mut sockets = SocketSet::new(vec![]);
-
-            let tcp_raw_rx_buffer =
-                raw::PacketBuffer::new(vec![raw::PacketMetadata::EMPTY; 2], vec![0; 2560]);
-            let tcp_raw_tx_buffer =
-                raw::PacketBuffer::new(vec![raw::PacketMetadata::EMPTY; 2], vec![0; 2560]);
-            let tcp_raw_socket = raw::Socket::new(
-                IpVersion::Ipv4,
-                IpProtocol::Tcp,
-                tcp_raw_rx_buffer,
-                tcp_raw_tx_buffer,
-            );
-            let tcp_raw_handle = sockets.add(tcp_raw_socket);
-
-            let udp_raw_rx_buffer =
-                raw::PacketBuffer::new(vec![raw::PacketMetadata::EMPTY; 2], vec![0; 2560]);
-            let udp_raw_tx_buffer =
-                raw::PacketBuffer::new(vec![raw::PacketMetadata::EMPTY; 2], vec![0; 2560]);
-            let udp_raw_socket = raw::Socket::new(
-                IpVersion::Ipv4,
-                IpProtocol::Udp,
-                udp_raw_rx_buffer,
-                udp_raw_tx_buffer,
-            );
-            let udp_raw_handle = sockets.add(udp_raw_socket);
-
-            let icmp_raw_rx_buffer =
-            raw::PacketBuffer::new(vec![raw::PacketMetadata::EMPTY; 2], vec![0; 2560]);
-            let icmp_raw_tx_buffer =
-            raw::PacketBuffer::new(vec![raw::PacketMetadata::EMPTY; 2], vec![0; 2560]);
-            let icmp_raw_socket = raw::Socket::new(
-            IpVersion::Ipv4,
-            IpProtocol::Icmp,
-            icmp_raw_rx_buffer,
-            icmp_raw_tx_buffer,
-            );
-            let icmp_raw_handle = sockets.add(icmp_raw_socket);
-
-            loop {
-                let timestamp = Instant::now();
-                match iface.poll(timestamp, &mut device, &mut sockets) {
-                    Ok(_) => {}
-                    Err(e) => {
-                        debug!("poll error: {}", e);
-                    }
-                }
-
-                for (handle, s) in sockets.iter_mut() {
-                    if let Some(s) = raw::Socket::downcast_mut(s){
-                        let protocol = s.ip_protocol().clone();
-                        
-                        if s.can_recv() {
-                            log::trace!("socket {} : {} can received", s.ip_version(), s.ip_protocol());
-                            match s.recv() {
-                                Ok(buf) => match protocol {
-                                    IpProtocol::HopByHop => {}
-                                    IpProtocol::Icmp => {
-                                        match self.listener.send(TunMessage::new(
-                                            self.short_addr,
-                                            TunPayload::Icmp(buf.to_vec()),
-                                        )) {
-                                            Ok(_) => {},
-                                            Err(e) => {log::warn!("failed to send TunMessage to listener {}", e)},
-                                        }
-                                    },
-                                    IpProtocol::Igmp => {}
-                                    IpProtocol::Tcp => {
-                                        match self.listener.send(TunMessage::new(
-                                            self.short_addr,
-                                            TunPayload::Tcp(buf.to_vec()),
-                                        )) {
-                                            Ok(_) => {},
-                                            Err(e) => {log::warn!("failed to send TunMessage to listener {}", e)},
-                                        }
-                                    }
-                                    IpProtocol::Udp => {
-                                        match self.listener.send(TunMessage::new(
-                                            self.short_addr,
-                                            TunPayload::Udp(buf.to_vec()),
-                                        )){
-                                            Ok(_) => {},
-                                            Err(e) => {log::warn!("failed to send TunMessage to listener {}", e)},
-                                        }
-                                    }
-                                    IpProtocol::Ipv6Route => {}
-                                    IpProtocol::Ipv6Frag => {}
-                                    IpProtocol::Icmpv6 => {}
-                                    IpProtocol::Ipv6NoNxt => {}
-                                    IpProtocol::Ipv6Opts => {}
-                                    IpProtocol::Unknown(_) => {}
-                                },
-                                Err(e) => {
-                                    log::warn!("Failed to receive data from socket : {:?}", e)
-                                }
-                            }
+        thread::spawn(move || loop {
+            match net_rx.next() {
+                Ok(buf) => {
+                    match self.listener.send(TunMessage::new(
+                        self.short_addr,
+                        TunPayload::Data(buf.to_vec()),
+                    )) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            log::warn!("failed to send TunMessage to listener {}", e)
                         }
                     }
-                    
                 }
+                Err(_) => {
+                    log::warn!("Failed to receive packet from tun interface")
+                }
+            }
+        });
 
-
-                match rx.try_recv() {
-                    Ok(tun_msg) => {
-                        match tun_msg.get_payload() {
-                            TunPayload::Udp(data) => {
-                                log::trace!("TUN interface sending UDP {:?}", data);
-                                let udp_socket = sockets.get_mut::<raw::Socket>(udp_raw_handle);
-                                match udp_socket.send_slice(&data) {
-                                    Ok(_) => log::trace!("TUN interface sent UDP data"),
-                                    Err(e) => {
-                                        log::warn!("TUN interface failed ot send UDP {:?}", e);
-                                    }
-                                }
-                            }
-                            TunPayload::Tcp(data) => {
-                                log::trace!("TUN interface sending TCP {:?}", data);
-                                let tcp_socket = sockets.get_mut::<raw::Socket>(tcp_raw_handle);
-                                match tcp_socket.send_slice(&data) {
-                                    Ok(_) => log::trace!("TUN interface sent TCP data"),
-                                    Err(e) => {
-                                        log::warn!("TUN interface failed ot send TCP {:?}", e);
-                                    }
-                                }
-                            }
-                            TunPayload::Icmp(data) => {
-                                log::trace!("TUN interface sending ICMP {:?}", data);
-                                let icmp_socket = sockets.get_mut::<raw::Socket>(icmp_raw_handle);
-                                match icmp_socket.send_slice(&data) {
-                                    Ok(_) => log::trace!("TUN interface sent ICMP data"),
-                                    Err(e) => {
-                                        log::warn!("TUN interface failed ot send ICMP {:?}", e);
-                                    }
-                                }
-                            }
-                            TunPayload::Stop => {
-                                log::warn!("Stop not implmented yet");
-                            }
-                            TunPayload::Error(e) => {
-                                log::warn!("TunPayload error ")
-                            }
-                        }
-                        // socket.send_slice(tun_msg.get_payload())
+        thread::spawn(move || loop {
+            match rx.recv() {
+                Ok(tun_msg) => match tun_msg.get_payload() {
+                    TunPayload::Data(buf) => {
+                        net_tx.send_to(&buf, None);
                     }
-                    Err(e) => {}
-                }
-
-                phy_wait(fd, Some(Duration::from_millis(10))).expect("wait error");
+                    TunPayload::Stop => {}
+                    TunPayload::Error(_) => {}
+                },
+                Err(e) => log::warn!("Failed to receive from network manager : {}", e),
             }
         });
     }
@@ -321,83 +191,79 @@ impl NetworkManager {
         (traffic_class >> 2, traffic_class & 0b0000_0011)
     }
 
-    pub fn ipv6_from_ipv4(pan_id: u16, buf: &Vec<u8>) -> Result<Vec<u8>, wire::Error> {
-        let ipv4_pkt = Ipv4Packet::new_checked(buf)?;
+    pub fn ipv6_from_ipv4(pan_id: u16, buf: &Vec<u8>) -> Option<Vec<u8>> {
+        let ipv4_pkt = Ipv4Packet::new(&buf);
+        if let Some(ipv4) = ipv4_pkt {
+            let mut buf = [0u8; 1520];
+            if let Some(ref mut ipv6) = MutableIpv6Packet::new(&mut buf) {
+                ipv6.set_destination(Self::ipv6_addr_from_ipv4_addr(
+                    pan_id,
+                    &ipv4.get_destination(),
+                ));
+                ipv6.set_source(Self::ipv6_addr_from_ipv4_addr(pan_id, &ipv4.get_source()));
+                ipv6.set_traffic_class(Self::dscp_ecn_to_traffic_class(
+                    ipv4.get_dscp(),
+                    ipv4.get_ecn(),
+                ));
+                ipv6.set_flow_label(0); //TODO
+                ipv6.set_payload(ipv4.payload());
+                ipv6.set_next_header(ipv4.get_next_level_protocol());
+                ipv6.set_hop_limit(ipv4.get_ttl());
+                ipv6.set_version(6);
+                ipv6.set_payload_length(ipv4.payload().len().try_into().unwrap());
 
-        let dst = Self::ipv6_addr_from_ipv4_addr(pan_id, &ipv4_pkt.dst_addr().into());
-        let src = Self::ipv6_addr_from_ipv4_addr(pan_id, &ipv4_pkt.src_addr().into());
-        let traffic_class = Self::dscp_ecn_to_traffic_class(ipv4_pkt.dscp(), ipv4_pkt.ecn());
-
-        let mut bytes = vec![0xff; 1520];
-        let mut packet = Ipv6Packet::new_unchecked(&mut bytes);
-        // Version, Traffic Class, and Flow Label are not
-        // byte aligned. make sure the setters and getters
-        // do not interfere with each other.
-        packet.set_version(6);
-        packet.set_traffic_class(traffic_class);
-        packet.set_flow_label(0); //TODO
-        
-        
-        packet.set_payload_len(ipv4_pkt.payload().len().try_into().unwrap());
-        packet.set_next_header(ipv4_pkt.next_header());
-        packet.set_hop_limit(ipv4_pkt.hop_limit());
-        packet.set_src_addr(src.into());
-        packet.set_dst_addr(dst.into());
-        packet.payload_mut().copy_from_slice(ipv4_pkt.payload());
-
-        let payload_len = packet.total_len().clone();
-        Ok(packet.into_inner()[..payload_len].to_vec())
-    }
-
-    pub fn ipv4_from_ipv6(buf: &mut Vec<u8>) -> Result<(IpProtocol, Vec<u8>, u16, u16), wire::Error> {
-        log::trace!("-->ipv4_from_ipv6 : {:?}", buf);
-        let mut ipv6_pkt = Ipv6Packet::new_checked(buf)?;
-        let dst = Self::ipv4_addr_from_ipv6(ipv6_pkt.dst_addr().into());
-        let src = Self::ipv4_addr_from_ipv6(ipv6_pkt.src_addr().into());
-        let (dscp, ecn) = Self::traffic_class_to_dscp_ecn(ipv6_pkt.traffic_class());
-
-        let mut bytes = vec![0xa5; 1520];
-        let mut packet = Ipv4Packet::new_unchecked(&mut bytes);
-        
-        packet.set_version(4);
-        packet.set_header_len(20);
-        packet.set_dscp(dscp);
-        packet.set_ecn(ecn);
-        packet.set_total_len(20 + ipv6_pkt.payload_len());
-        packet.set_ident(0);
-        packet.clear_flags();
-        packet.set_more_frags(false);
-        packet.set_dont_frag(true);
-        packet.set_frag_offset(0);
-        packet.set_hop_limit(ipv6_pkt.hop_limit());
-        packet.set_next_header(ipv6_pkt.next_header());
-        packet.set_src_addr(src.into());
-        packet.set_dst_addr(dst.into());
-        // packet.fill_checksum();
-
-        match ipv6_pkt.next_header() {
-
-            IpProtocol::Udp => {
-                let mut udp_pkt = UdpPacket::new_checked(ipv6_pkt.payload_mut())?;
-                udp_pkt.set_checksum(0);
-                packet.payload_mut().copy_from_slice(udp_pkt.into_inner());
-                packet.set_checksum(0);
-            },
-            _ => {
-                packet.payload_mut().copy_from_slice(ipv6_pkt.payload_mut());
+                return Some(ipv6.packet()[..].to_vec());
             }
         }
+        None
+    }
 
-        
+    pub fn ipv4_from_ipv6(buf: &mut Vec<u8>) -> Option<(Vec<u8>, u16, u16)> {
+        log::trace!("-->ipv4_from_ipv6 : {:?}", buf);
+        let mut ipv6_pkt = Ipv6Packet::new(buf)?;
+        let dst = Self::ipv4_addr_from_ipv6(ipv6_pkt.get_destination());
+        let src = Self::ipv4_addr_from_ipv6(ipv6_pkt.get_source());
+        let (dscp, ecn) = Self::traffic_class_to_dscp_ecn(ipv6_pkt.get_traffic_class());
+
+        let mut bytes = vec![0xa5; 1520];
+        let mut packet = MutableIpv4Packet::new(&mut bytes)?;
+
+        packet.set_version(4);
+
+        packet.set_dscp(dscp);
+        packet.set_ecn(ecn);
+        packet.set_header_length(20);
+        packet.set_total_length((20 + ipv6_pkt.payload().len()).try_into().unwrap());
+        packet.set_identification(0x42);
+        packet.set_flags(Ipv4Flags::DontFragment);
+        packet.set_fragment_offset(0);
+        packet.set_next_level_protocol(ipv6_pkt.get_next_header());
+        packet.set_ttl(ipv6_pkt.get_hop_limit());
         let (pan_id, short_addr) =
-            Self::pan_id_and_short_addr_from_ipv6(&ipv6_pkt.dst_addr().into());
-        let payload_len = packet.total_len().clone() as usize;
-        Ok((
-            ipv6_pkt.next_header(),
-            packet.into_inner()[..payload_len].to_vec(),
-            pan_id,
-            short_addr,
-        ))
+            Self::pan_id_and_short_addr_from_ipv6(&ipv6_pkt.get_destination());
+        Some((packet.packet()[..].to_vec(), pan_id, short_addr))
+        // match ipv6_pkt.next_header() {
+
+        //     IpProtocol::Udp => {
+        //         let mut udp_pkt = UdpPacket::new_checked(ipv6_pkt.payload_mut())?;
+        //         udp_pkt.set_checksum(0);
+        //         packet.payload_mut().copy_from_slice(udp_pkt.into_inner());
+        //         packet.set_checksum(0);
+        //     },
+        //     _ => {
+        //         packet.payload_mut().copy_from_slice(ipv6_pkt.payload_mut());
+        //     }
+        // }
+
+        // let (pan_id, short_addr) =
+        //     Self::pan_id_and_short_addr_from_ipv6(&ipv6_pkt.dst_addr().into());
+        // let payload_len = packet.total_len().clone() as usize;
+        // Ok((
+        //     ipv6_pkt.next_header(),
+        //     packet.into_inner()[..payload_len].to_vec(),
+        //     pan_id,
+        //     short_addr,
+        // ))
     }
 
     pub fn CONF_CONTEXT_INFORMATION_TABLE_0(pan_id: u16) -> [u8; 14] {
@@ -442,35 +308,25 @@ impl NetworkManager {
                         match msg {
                             adp::Message::AdpG3DataEvent(g3_data) => {
                                 match Self::ipv4_from_ipv6(&mut g3_data.nsdu.clone()) {
-                                    Ok((protocol, pkt, pan_id, short_addr_dst)) => {
+                                    Some((pkt, pan_id, short_addr_dst)) => {
                                         if let Some(tx) = self.tun_devices.get(&short_addr_dst) {
                                             log::trace!("found sender for short addr {} -- sending TunPayload::Data", short_addr_dst);
-                                            let payload = match protocol {
-                                                IpProtocol::Tcp => Some(TunPayload::Tcp(pkt)),
-                                                IpProtocol::Udp => Some(TunPayload::Udp(pkt)),
-                                                IpProtocol::Icmp => Some(TunPayload::Icmp(pkt)),
-                                                _ => {
-                                                    log::warn!("ipv4_from_ipv6 protocol not implemented {}", protocol);
-                                                    None
-                                                }
-                                            };
-                                            if let Some(payload) = payload {
-                                                match tx.send(TunMessage {
-                                                    short_addr: short_addr_dst,
-                                                    payload: payload,
-                                                }) {
-                                                    Ok(_) => {}
-                                                    Err(e) => {
-                                                        log::warn!(
+
+                                            match tx.send(TunMessage {
+                                                short_addr: short_addr_dst,
+                                                payload: TunPayload::Data(pkt),
+                                            }) {
+                                                Ok(_) => {}
+                                                Err(e) => {
+                                                    log::warn!(
                                                         "Failed to send ipv4 packet to TUN : {}",
                                                         e
                                                     )
-                                                    }
                                                 }
                                             }
                                         }
                                     }
-                                    Err(_) => {
+                                    _ => {
                                         log::warn!("Failed to transform message to ipv4");
                                     }
                                 }
@@ -516,9 +372,9 @@ impl NetworkManager {
                 match tun_rx.try_recv() {
                     Ok(msg) => {
                         match msg.payload {
-                            TunPayload::Udp(pkt) | TunPayload::Tcp(pkt) | TunPayload::Icmp(pkt) => {
+                            TunPayload::Data(pkt) => {
                                 match Self::ipv6_from_ipv4(self.pan_id, &pkt) {
-                                    Ok(pkt) => {
+                                    Some(pkt) => {
                                         log::trace!("Sending ipv6 packet to G3 {:?}", pkt);
                                         let data_request = AdpDataRequest::new(
                                             rand::thread_rng().gen(),
@@ -529,11 +385,8 @@ impl NetworkManager {
                                         // sleep(Duration::from_millis(100)).await;
                                         self.cmd_tx.send(usi::Message::UsiOut(data_request.into()));
                                     }
-                                    Err(e) => {
-                                        log::warn!(
-                                            "Failed to convert ipv6 packet to ipv4 packet : {}",
-                                            e
-                                        );
+                                    _ => {
+                                        log::warn!("Failed to convert ipv6 packet to ipv4 packet");
                                     }
                                 }
                             }
@@ -546,7 +399,7 @@ impl NetworkManager {
                     }
                     Err(_) => {}
                 }
-                sleep_ms(10);//TODO, spin threads and recv instead of try_recv
+                sleep_ms(10); //TODO, spin threads and recv instead of try_recv
             }
         });
     }
