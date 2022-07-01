@@ -79,7 +79,7 @@ impl TunDevice {
         let interfaces = pnet_datalink::interfaces();
         let interface = interfaces
             .into_iter()
-            .filter(|iface| iface.name == "tun0")
+            .filter(|iface| iface.name == "tap0")
             .next()
             .unwrap();
 
@@ -94,6 +94,7 @@ impl TunDevice {
         thread::spawn(move || loop {
             match net_rx.next() {
                 Ok(buf) => {
+                    log::warn!("received tun packet {:?}", buf);
                     match self.listener.send(TunMessage::new(
                         self.short_addr,
                         TunPayload::Data(buf.to_vec()),
