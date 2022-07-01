@@ -15,10 +15,9 @@ mod usi;
 use std::time::{Duration, SystemTime};
 use std::{env, io, str, thread};
 
-use bytes::BytesMut;
 use env_logger::Env;
 use flume::{Receiver, Sender};
-use packet::ip::v6::Packet;
+
 
 use std::io::{Read, Result as IoResult, Write};
 // use crossbeam_channel::{bounded, Sender};

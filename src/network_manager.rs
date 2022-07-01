@@ -7,12 +7,10 @@ use std::{
     thread::{self, sleep_ms}, vec,
 };
 
-use bytes::{Buf, BytesMut};
+
 
 use config::Config;
 
-use futures::{future, stream::FuturesUnordered, StreamExt};
-use packet::{buffer::Buffer, ip};
 
 use crate::app_config;
 use smoltcp::socket::{tcp, udp};
@@ -170,6 +168,7 @@ impl TunDevice {
                                     },
                                     IpProtocol::Igmp => {}
                                     IpProtocol::Tcp => {
+                                        log::trace!("tun received : {:?}", buf);
                                         match self.listener.send(TunMessage::new(
                                             self.short_addr,
                                             TunPayload::Tcp(buf.to_vec()),
@@ -523,9 +522,14 @@ impl NetworkManager {
                     Ok(msg) => {
                         match msg.payload {
                             TunPayload::Udp(pkt) | TunPayload::Tcp(pkt) | TunPayload::Icmp(pkt) => {
+                                log::trace!("send {:?} to G3", pkt);
+
+                                let mut ipv6 = Ipv6Packet::new_unchecked(pkt);
+                                ipv6.set_src_addr(Self::ipv6_from_short_addr(*app_config::PAN_ID, msg.short_addr).into());
+                                log::trace!("ipv6 pkt : {:?}", ipv6);
                                 let data_request = AdpDataRequest::new(
                                     rand::thread_rng().gen(),
-                                    &pkt,
+                                    &ipv6.into_inner(),
                                     true,
                                     0,
                                 );

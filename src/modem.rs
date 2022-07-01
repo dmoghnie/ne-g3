@@ -10,11 +10,11 @@ use crate::{
     request,
     usi::{self, MessageHandler},
 };
-use bytes::BytesMut;
+
 use lazy_static::lazy_static;
 use log;
 use std::collections::HashMap;
-use packet::ip::v6::Packet;
+
 
 #[derive(thiserror::Error, Debug)]
 enum ModemError {

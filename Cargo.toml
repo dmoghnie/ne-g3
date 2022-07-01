@@ -29,25 +29,7 @@ rand = "*"
 config = "*"
 serde = "*"
 serde_derive = "*"
-# packet = "*"
-packet = {path = "../../libs/rust-packet"}
-futures = "0.3.21"
 
-[target.'cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))'.dependencies]
-tun = {version = "0.5.3", features = ["async"]}
-
-[target.'cfg(any(target_os = "linux"))'.dependencies]
-tokio-tun = "*"
-
-[target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "ios", target_os = "android"))'.dependencies]
-tokio = { version = "1.19.2", features = ["full"]}
-# tokio-stream = "*"
-tokio-util = { version = "0.7.3", features = ["codec"]}
-
-bytes = { version = "1.1.0"}
-byteorder = { version = "1.4.3"}
-# This is only for the `ready` macro.
-futures-core = { version = "0.3.21" }
 
 # smoltcp = {path = "../../libs/smoltcp", default-features= true}
 
