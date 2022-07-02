@@ -524,12 +524,12 @@ impl NetworkManager {
                             TunPayload::Udp(pkt) | TunPayload::Tcp(pkt) | TunPayload::Icmp(pkt) => {
                                 log::trace!("send {:?} to G3", pkt);
 
-                                let mut ipv6 = Ipv6Packet::new_unchecked(pkt);
-                                ipv6.set_src_addr(Self::ipv6_from_short_addr(*app_config::PAN_ID, msg.short_addr).into());
-                                log::trace!("ipv6 pkt : {:?}", ipv6);
+                                // let mut ipv6 = Ipv6Packet::new_unchecked(pkt);
+                                // ipv6.set_src_addr(Self::ipv6_from_short_addr(*app_config::PAN_ID, msg.short_addr).into());
+                                // log::trace!("ipv6 pkt : {:?}", ipv6);
                                 let data_request = AdpDataRequest::new(
                                     rand::thread_rng().gen(),
-                                    &ipv6.into_inner(),
+                                    &pkt,
                                     true,
                                     0,
                                 );

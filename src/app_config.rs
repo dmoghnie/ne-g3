@@ -30,8 +30,8 @@ pub const RAND_S_DEFAULT: [u8; 16] = [0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x
 // pub const CONF_CONTEXT_INFORMATION_TABLE_0: [u8; 14] = [
 //     0x2, 0x0, 0x1, 0x50, 0xfe, 0x80, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x78, 0x1d,
 // ];
-pub const CONF_CONTEXT_INFORMATION_TABLE_1: [u8; 10] =
-    [0x2, 0x0, 0x1, 0x30, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66];
+// pub const CONF_CONTEXT_INFORMATION_TABLE_1: [u8; 10] =
+//     [0x2, 0x0, 0x1, 0x30, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66];
 
 pub const X_IDS_ARIB: [u8; 34] = [0x53, 0x4D, 0xAD, 0xB2, 0xC4, 0xD5, 0xE6, 0xFA, 0x53, 0x4D, 0xAD, 0xB2, 0xC4, 0xD5, 0xE6, 0xFA,
 0x53, 0x4D, 0xAD, 0xB2, 0xC4, 0xD5, 0xE6, 0xFA, 0x53, 0x4D, 0xAD, 0xB2, 0xC4, 0xD5, 0xE6, 0xFA,
@@ -56,6 +56,10 @@ lazy_static! {
     pub static ref CONF_CONTEXT_INFORMATION_TABLE_0: [u8; 14] = {
         let s = SETTINGS.read().unwrap();
         NetworkManager::CONF_CONTEXT_INFORMATION_TABLE_0(s.g3.pan_id)
+    };
+    pub static ref CONF_CONTEXT_INFORMATION_TABLE_1: [u8; 10] = {
+        let s = SETTINGS.read().unwrap();
+        s.g3.host_prefix
     };
     pub static ref PAN_ID:u16 = {
         let s = SETTINGS.read().unwrap();
@@ -84,7 +88,8 @@ pub struct G3 {
     pub band: u8,
     pub psk: [u8; 16],
     pub gmk: [u8; 16],
-    pub ids: Vec<u8>
+    pub ids: Vec<u8>,
+    pub host_prefix: [u8; 10]
 }
 
 #[derive(Debug, Deserialize)]
@@ -99,7 +104,7 @@ pub struct Serial {
 pub struct Settings {
     pub g3: G3,
     pub serial: Serial,
-    pub network: Network
+    pub network: Network,
 }
 
 #[derive(Debug, Deserialize)]
