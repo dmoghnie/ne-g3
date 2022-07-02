@@ -33,6 +33,7 @@ enum TunPayload {
     Udp(Vec<u8>),
     Tcp(Vec<u8>),
     Icmp(Vec<u8>),
+    Icmp6(Vec<u8>),
     Stop,
     Error(()), //TODO
 }
@@ -94,9 +95,14 @@ impl TunDevice {
             let fd = device.as_raw_fd();
 
             let ip_addr = IpCidr::new(IpAddress::from(ipv4_addr), 16);
-
+            let ip_addrs = [
+                IpCidr::new(IpAddress::v6(0xfe80, 0, 0, 0, 0x781d, 0xffff, 0xfe00, 0), 80),
+                IpCidr::new(IpAddress::v6(0xfd00, 0, 0x2, 0x781d, 0x1122, 0x3344, 0x5566, 0), 64),
+                IpCidr::new(IpAddress::v6(0xfe80, 0, 0, 0, 0x781d, 0xffff, 0xfe00, 1), 80),
+                IpCidr::new(IpAddress::v6(0xfd00, 0, 0x2, 0x781d, 0x1122, 0x3344, 0x5566, 1), 64),
+            ];
             let mut iface = InterfaceBuilder::new()
-                .ip_addrs([ip_addr])
+                .ip_addrs(ip_addrs)
                 // .sixlowpan_fragments_cache(FragmentsCache::new(vec![], BTreeMap::new()))
                 .ipv4_fragments_cache(FragmentsCache::new(vec![], BTreeMap::new()))
                 .finalize(&mut device);
@@ -113,8 +119,9 @@ impl TunDevice {
                 tcp_raw_rx_buffer,
                 tcp_raw_tx_buffer,
             );
+        
             let tcp_raw_handle = sockets.add(tcp_raw_socket);
-
+        
             let udp_raw_rx_buffer =
                 raw::PacketBuffer::new(vec![raw::PacketMetadata::EMPTY; 2], vec![0; 2560]);
             let udp_raw_tx_buffer =
@@ -138,6 +145,18 @@ impl TunDevice {
             icmp_raw_tx_buffer,
             );
             let icmp_raw_handle = sockets.add(icmp_raw_socket);
+
+            let icmp6_raw_rx_buffer =
+            raw::PacketBuffer::new(vec![raw::PacketMetadata::EMPTY; 2], vec![0; 2560]);
+            let icmp6_raw_tx_buffer =
+            raw::PacketBuffer::new(vec![raw::PacketMetadata::EMPTY; 2], vec![0; 2560]);
+            let icmp6_raw_socket = raw::Socket::new(
+            IpVersion::Ipv6,
+            IpProtocol::Icmpv6,
+            icmp6_raw_rx_buffer,
+            icmp6_raw_tx_buffer,
+            );
+            let icmp6_raw_handle = sockets.add(icmp6_raw_socket);
 
             loop {
                 let timestamp = Instant::now();
@@ -188,7 +207,15 @@ impl TunDevice {
                                     }
                                     IpProtocol::Ipv6Route => {}
                                     IpProtocol::Ipv6Frag => {}
-                                    IpProtocol::Icmpv6 => {}
+                                    IpProtocol::Icmpv6 => {
+                                        match self.listener.send(TunMessage::new(
+                                            self.short_addr,
+                                            TunPayload::Icmp6(buf.to_vec()),
+                                        )){
+                                            Ok(_) => {},
+                                            Err(e) => {log::warn!("failed to send TunMessage to listener {}", e)},
+                                        }
+                                    }
                                     IpProtocol::Ipv6NoNxt => {}
                                     IpProtocol::Ipv6Opts => {}
                                     IpProtocol::Unknown(_) => {}
@@ -233,6 +260,16 @@ impl TunDevice {
                                     Ok(_) => log::trace!("TUN interface sent ICMP data"),
                                     Err(e) => {
                                         log::warn!("TUN interface failed ot send ICMP {:?}", e);
+                                    }
+                                }
+                            }
+                            TunPayload::Icmp6(data) => {
+                                log::trace!("TUN interface sending ICMP6 {:?}", data);
+                                let icmp6_socket = sockets.get_mut::<raw::Socket>(icmp6_raw_handle);
+                                match icmp6_socket.send_slice(&data) {
+                                    Ok(_) => log::trace!("TUN interface sent ICMP6 data"),
+                                    Err(e) => {
+                                        log::warn!("TUN interface failed ot send ICMP6 {:?}", e);
                                     }
                                 }
                             }
@@ -521,7 +558,8 @@ impl NetworkManager {
                 match tun_rx.try_recv() {
                     Ok(msg) => {
                         match msg.payload {
-                            TunPayload::Udp(pkt) | TunPayload::Tcp(pkt) | TunPayload::Icmp(pkt) => {
+                            TunPayload::Udp(pkt) | TunPayload::Tcp(pkt) | 
+                                TunPayload::Icmp(pkt) | TunPayload::Icmp6(pkt) => {
                                 log::trace!("send {:?} to G3", pkt);
 
                                 // let mut ipv6 = Ipv6Packet::new_unchecked(pkt);
