@@ -30,7 +30,7 @@ config = "*"
 serde = "*"
 serde_derive = "*"
 
-tun-tap = {path = "../../libs/tuntap"}
+tun-tap = {git = "https://github.com/dmoghnie/tuntap"}
 pnet_packet = "*"
 
 # smoltcp = {path = "../../libs/smoltcp", default-features= true}
