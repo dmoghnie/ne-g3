@@ -43,8 +43,8 @@ fn infer_proto(buf: &[u8]) -> PacketProtocol {
         p => PacketProtocol::Other(p),
     }
 }
-fn cmd(cmd: &str, args: &[&str]) {
-    let ecode = Command::new("ip")
+fn cmd(program: &str, cmd: &str, args: &[&str]) {
+    let ecode = Command::new(program)
         .args(args)
         .spawn()
         .unwrap()
@@ -112,7 +112,7 @@ impl TunDevice {
 
         // Configure the „local“ (kernel) endpoint. Kernel is (the host) 10.107.1.3, we (the app)
         // pretend to be 10.107.1.2.
-        cmd(
+        cmd("ip",
             "ip",
             &[
                 "addr",
@@ -124,9 +124,11 @@ impl TunDevice {
         );
         cmd(
             "ip",
+            "ip",
             &["addr", "add", "dev", iface.name(), &format!("{}/64", ula)],
         );
-        cmd("ip", &["link", "set", "up", "dev", iface.name()]);
+        cmd("ip", "ip", &["link", "set", "up", "dev", iface.name()]);
+        cmd("ifconfig", "ifconfig", &[iface.name(), "mtu", "1280"]);
         let iface = Arc::new(iface);
         let iface_writer = Arc::clone(&iface);
         let iface_reader = Arc::clone(&iface);
