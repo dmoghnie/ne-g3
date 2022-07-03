@@ -136,7 +136,7 @@ impl TunDevice {
             loop {
                 match iface_reader.recv(&mut buf) {
                     Ok(size) => {
-                        log::trace("tun received {} bytes", size);
+                        log::trace!("tun received {} bytes", size);
                         if size > 0 {
                             match infer_proto(&buf) {
                                 PacketProtocol::IPv4 => {
