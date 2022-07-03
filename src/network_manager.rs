@@ -11,7 +11,11 @@ use std::{
 };
 
 use config::Config;
-use pnet_packet::{ipv6::{Ipv6Packet, MutableIpv6Packet}, Packet, ipv4::{Ipv4Packet, MutableIpv4Packet, Ipv4Flags}};
+use pnet_packet::{
+    ipv4::{Ipv4Flags, Ipv4Packet, MutableIpv4Packet},
+    ipv6::{Ipv6Packet, MutableIpv6Packet},
+    Packet,
+};
 
 use crate::app_config;
 use std::sync::atomic::Ordering;
@@ -263,14 +267,14 @@ impl NetworkManager {
         let mut ipv6_pkt = Ipv6Packet::new(buf)?;
         let (_, short_addr) = Self::pan_id_and_short_addr_from_ipv6(&ipv6_pkt.get_destination());
         Some((TunPayload::Data(buf.to_vec()), short_addr))
-        
     }
     pub fn ipv6_from_ipv4(pan_id: u16, buf: &Vec<u8>) -> Option<Vec<u8>> {
         let ipv4_pkt = Ipv4Packet::new(buf)?;
 
         let dst = Self::ipv6_addr_from_ipv4_addr(pan_id, &ipv4_pkt.get_destination());
         let src = Self::ipv6_addr_from_ipv4_addr(pan_id, &ipv4_pkt.get_source());
-        let traffic_class = Self::dscp_ecn_to_traffic_class(ipv4_pkt.get_dscp(), ipv4_pkt.get_ecn());
+        let traffic_class =
+            Self::dscp_ecn_to_traffic_class(ipv4_pkt.get_dscp(), ipv4_pkt.get_ecn());
 
         let mut bytes = vec![0xff; 1520];
         let mut packet = MutableIpv6Packet::new(&mut bytes)?;
@@ -287,13 +291,11 @@ impl NetworkManager {
         packet.set_source(src);
         packet.set_destination(dst);
         packet.set_payload(ipv4_pkt.payload());
-        
+
         Some(packet.packet().to_vec())
     }
 
-    pub fn ipv4_from_ipv6(
-        buf: &mut Vec<u8>,
-    ) -> Option<(Vec<u8>, u16, u16)> {
+    pub fn ipv4_from_ipv6(buf: &mut Vec<u8>) -> Option<(Vec<u8>, u16, u16)> {
         log::trace!("-->ipv4_from_ipv6 : {:?}", buf);
         let ipv6_pkt = Ipv6Packet::new(buf)?;
         let dst = Self::ipv4_addr_from_ipv6(ipv6_pkt.get_destination());
@@ -310,7 +312,7 @@ impl NetworkManager {
         packet.set_total_length(20 + ipv6_pkt.get_payload_length());
         packet.set_identification(0);
         packet.set_flags(Ipv4Flags::DontFragment);
- 
+
         packet.set_ttl(ipv6_pkt.get_hop_limit());
         packet.set_next_level_protocol(ipv6_pkt.get_next_header());
         packet.set_source(src);
@@ -319,12 +321,8 @@ impl NetworkManager {
 
         let (pan_id, short_addr) =
             Self::pan_id_and_short_addr_from_ipv6(&ipv6_pkt.get_destination());
-       
-        Some((
-            packet.packet().to_vec(),
-            pan_id,
-            short_addr,
-        ))
+
+        Some((packet.packet().to_vec(), pan_id, short_addr))
     }
 
     pub fn CONF_CONTEXT_INFORMATION_TABLE_0(pan_id: u16) -> [u8; 14] {
@@ -362,6 +360,7 @@ impl NetworkManager {
         log::trace!("network manager starting ...");
 
         thread::spawn(move || {
+            let mut buffer_available = true;
             loop {
                 match rx.try_recv() {
                     Ok(msg) => {
@@ -421,32 +420,42 @@ impl NetworkManager {
                                     }
                                 }
                             }
+                            adp::Message::AdpG3BufferEvent(event) => {
+                                log::trace!("Received buffer ready : {}", event.buffer_ready);
+                                buffer_available = event.buffer_ready;
+                            }
                             _ => {}
                         }
                     }
                     Err(_) => {}
                 }
-                match tun_rx.try_recv() {
-                    Ok(msg) => {
-                        match msg.payload {
-                            TunPayload::Data(pkt) => {
-                                log::trace!("send {:?} to G3", pkt);
+                if buffer_available {
+                    match tun_rx.try_recv() {
+                        Ok(msg) => {
+                            match msg.payload {
+                                TunPayload::Data(pkt) => {
+                                    log::trace!("send {:?} to G3", pkt);
 
-                                // let mut ipv6 = Ipv6Packet::new_unchecked(pkt);
-                                // ipv6.set_src_addr(Self::ipv6_from_short_addr(*app_config::PAN_ID, msg.short_addr).into());
-                                // log::trace!("ipv6 pkt : {:?}", ipv6);
-                                let data_request =
-                                    AdpDataRequest::new(rand::thread_rng().gen(), &pkt, true, 0);
-                                self.cmd_tx.send(usi::Message::UsiOut(data_request.into()));
-                            }
-                            TunPayload::Stop => { //Should we use this as a notification that the device is stopped or should we have a separate message
-                            }
-                            TunPayload::Error(e) => {
-                                log::trace!("Received error from device");
+                                    // let mut ipv6 = Ipv6Packet::new_unchecked(pkt);
+                                    // ipv6.set_src_addr(Self::ipv6_from_short_addr(*app_config::PAN_ID, msg.short_addr).into());
+                                    // log::trace!("ipv6 pkt : {:?}", ipv6);
+                                    let data_request = AdpDataRequest::new(
+                                        rand::thread_rng().gen(),
+                                        &pkt,
+                                        true,
+                                        0,
+                                    );
+                                    self.cmd_tx.send(usi::Message::UsiOut(data_request.into()));
+                                }
+                                TunPayload::Stop => { //Should we use this as a notification that the device is stopped or should we have a separate message
+                                }
+                                TunPayload::Error(e) => {
+                                    log::trace!("Received error from device");
+                                }
                             }
                         }
+                        Err(_) => {}
                     }
-                    Err(_) => {}
                 }
                 sleep(Duration::from_millis(10)); //TODO, spin threads and recv instead of try_recv
             }

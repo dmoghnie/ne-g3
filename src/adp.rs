@@ -545,6 +545,11 @@ pub fn usi_message_to_message(msg: &InMessage) -> Option<Message> {
                     // let let Some(data_event) = AdpG3DataEvent::try_from_message
                     log::warn!("Data indication ")
                 }
+                G3_SERIAL_MSG_ADP_BUFFER_INDICATION=> {
+                    if let Some(buffer_indication) = AdpG3BufferEvent::try_from(value) {
+                        return Some(Message::AdpG3BufferEvent(buffer_indication));
+                    }
+                }
                 _ => return None,
             }
         }
@@ -861,7 +866,22 @@ pub struct AdpG3RouteDiscoveryResponse {}
 pub struct AdpG3PathDiscoveryResponse {}
 
 #[derive(Debug)]
-pub struct AdpG3BufferEvent {}
+pub struct AdpG3BufferEvent {
+    pub buffer_ready: bool
+}
+
+impl AdpG3BufferEvent {
+    pub fn try_from_message(msg: &usi::InMessage) -> Option<AdpG3BufferEvent> {
+        if msg.buf.len() > 1 {
+            //cmd is the first byte???
+            //Add one byte for cmd
+            if let Ok(buffer_ready) = bool::try_from(msg.buf[1]) {
+                return Some(AdpG3BufferEvent { buffer_ready }); 
+            }
+        }
+        None
+    }
+}
 
 const DISCOVERY_EVENT_LEN: usize = 7;
 
