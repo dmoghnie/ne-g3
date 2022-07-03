@@ -546,7 +546,7 @@ pub fn usi_message_to_message(msg: &InMessage) -> Option<Message> {
                     log::warn!("Data indication ")
                 }
                 G3_SERIAL_MSG_ADP_BUFFER_INDICATION=> {
-                    if let Some(buffer_indication) = AdpG3BufferEvent::try_from(value) {
+                    if let Some(buffer_indication) = AdpG3BufferEvent::try_from_message(&msg) {
                         return Some(Message::AdpG3BufferEvent(buffer_indication));
                     }
                 }
@@ -875,9 +875,9 @@ impl AdpG3BufferEvent {
         if msg.buf.len() > 1 {
             //cmd is the first byte???
             //Add one byte for cmd
-            if let Ok(buffer_ready) = bool::try_from(msg.buf[1]) {
-                return Some(AdpG3BufferEvent { buffer_ready }); 
-            }
+            
+            return Some(AdpG3BufferEvent { buffer_ready: msg.buf[1] != 0 }); 
+            
         }
         None
     }
