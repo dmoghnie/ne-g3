@@ -55,14 +55,14 @@ pub const LEN_PROTOCOL_LO_MSK: u8 = 0xC0;
 pub const LEN_PROTOCOL_LO_SHIFT: u8 = 6;
 
 pub const XLEN_PROTOCOL_OFFSET: u8 = 2;
-pub const XLEN_PROTOCOL_MSK: u8 = 0x80;
-pub const XLEN_PROTOCOL_SHIFT_L: u8 = 3;
+pub const XLEN_PROTOCOL_MSK: u8 = 0xC0;
+pub const XLEN_PROTOCOL_SHIFT_L: u8 = 4;
 pub const XLEN_PROTOCOL_SHIFT_R: u8 = 10;
 
 pub const PAYLOAD_OFFSET: u8 = 2;
 
 pub const CMD_PROTOCOL_OFFSET: u8 = 2;
-pub const CMD_PROTOCOL_MSK: u8 = 0x7F;
+pub const CMD_PROTOCOL_MSK: u8 = 0x3F;
 
 pub const PROTOCOL_DELIMITER: u8 = 0x7e;
 pub const PROTOCOL_ESC: u8 = 0x7d;

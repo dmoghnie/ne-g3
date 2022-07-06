@@ -41,6 +41,7 @@ const TIMER_RESOLUTION: Duration = Duration::from_millis(20000);
 fn main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
+    log::warn!("********* len {}", common::get_protocol_xlen(0x0f, 0x25, 0x5f));
     let s = app_config::SETTINGS.read().unwrap();
 
     log::info!("Settings : {:?}", s);
