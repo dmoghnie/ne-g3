@@ -152,7 +152,7 @@ impl InMessage {
     pub fn new() -> Self {
         InMessage {
             rxState: RxState::RxIdle,
-            buf: Vec::with_capacity(1024),
+            buf: Vec::with_capacity(2048),
             payload_len: 0,
             protocol_type: None,
         }
