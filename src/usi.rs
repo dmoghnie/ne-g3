@@ -54,12 +54,12 @@ impl OutMessage {
         }
     }
     pub fn to_usi(&self) -> Option<Vec<u8>> {
-        let mut v: Vec<u8> = Vec::with_capacity(2048); //TODO define those limits
+        let mut v: Vec<u8> = Vec::with_capacity(4096); //TODO define those limits
                                                        //Header is 2 bytes
                                                        //Cmd is first byte in the data
                                                        //in case of prime, the cmd byte when serializing contains the ex len
 
-        if self.data.len() > 2048 {
+        if self.data.len() > 4096 {
             //TODO set const
             return None;
         }
@@ -121,7 +121,7 @@ impl OutMessage {
                 v.push(crc as u8);
             }
         }
-        let mut r: Vec<u8> = Vec::with_capacity(2048);
+        let mut r: Vec<u8> = Vec::with_capacity(4096);
         for ch in v {
             if ch == common::MSGMARK || ch == common::ESCMARK {
                 r.push(common::ESCMARK);
@@ -152,7 +152,7 @@ impl InMessage {
     pub fn new() -> Self {
         InMessage {
             rxState: RxState::RxIdle,
-            buf: Vec::with_capacity(2048),
+            buf: Vec::with_capacity(4096),
             payload_len: 0,
             protocol_type: None,
         }
@@ -333,7 +333,7 @@ where
     pub fn new(receiver: T) -> Port<'a, T> {
         Port {
             message: usi::InMessage::new(),
-            buf: VecDeque::with_capacity(2048),
+            buf: VecDeque::with_capacity(4096),
             receiver,
             state: &PortState::Stopped,
             listeners: Vec::new(),
@@ -348,7 +348,7 @@ where
 
     // pub fn process<T>(&mut self, port: &mut T, listener:&Box<dyn message::MessageListener>) -> Option<Vec<u8>>
     fn process(&mut self) {
-        let mut b = [0; 2048];
+        let mut b = [0; 4096];
 
         match self.receiver.read(&mut b) {
             Ok(t) => {
