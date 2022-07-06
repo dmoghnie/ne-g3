@@ -146,8 +146,12 @@ impl TunDevice {
                                     log::warn!("Protocol IPV4 not implemented yet");
                                 }
                                 PacketProtocol::IPv6 => {
-                                    let packet = Ipv6Packet::new(&buf[..size]).unwrap();
-                                    for pkt in ipv6_frag_manager::fragment_packet(packet, 1280){
+                                    let packet = Ipv6Packet::new(&buf[..size])
+                                    .unwrap();
+                                    let pkts = ipv6_frag_manager::fragment_packet(packet, 1280);
+                                    log::trace!("Tun message fragmented into {} packets ", pkts.len());
+                                    for pkt in pkts{
+                                        
                                         match self.listener.send(TunMessage::new(
                                             self.short_addr,
                                             TunPayload::Data(pkt),
@@ -443,7 +447,7 @@ impl NetworkManager {
                         Ok(msg) => {
                             match msg.payload {
                                 TunPayload::Data(pkt) => {
-                                    log::trace!("send {:?} to G3", pkt);
+                                    log::trace!("send {} bytes to G3", pkt.len());
 
                                     // let mut ipv6 = Ipv6Packet::new_unchecked(pkt);
                                     // ipv6.set_src_addr(Self::ipv6_from_short_addr(*app_config::PAN_ID, msg.short_addr).into());

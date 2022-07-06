@@ -404,7 +404,7 @@ where
                         Message::UsiOut(cmd) => {
                             // self.send(&cmd);
                             if let Some(buf) = cmd.to_usi() {
-                                log::trace!("--> {}", common::to_hex_string(&buf));
+                                // log::trace!("--> {}", common::to_hex_string(&buf));
                                 match sender.write_all(&buf) {
                                     Ok(()) => {},
                                     Err(ref e) => {
