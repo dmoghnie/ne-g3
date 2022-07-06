@@ -129,7 +129,7 @@ impl TunDevice {
             &["addr", "add", "dev", iface.name(), &format!("{}/64", ula)],
         );
         cmd("ip", "ip", &["link", "set", "up", "dev", iface.name()]);
-        cmd("ifconfig", "ifconfig", &[iface.name(), "mtu", "1280"]);
+        // cmd("ifconfig", "ifconfig", &[iface.name(), "mtu", "1280"]);
         let iface = Arc::new(iface);
         let iface_writer = Arc::clone(&iface);
         let iface_reader = Arc::clone(&iface);
