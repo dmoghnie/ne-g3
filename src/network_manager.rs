@@ -160,6 +160,7 @@ impl TunDevice {
                                                 )
                                             }
                                         }
+                                        sleep(Duration::from_millis(10));
                                     }
 
                                 }
