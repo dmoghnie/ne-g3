@@ -355,7 +355,7 @@ where
                 if t == 0 {
                     return;
                 } else {
-                    trace!("usi received {} : size {} ", array_to_hex_string(b[..t].to_vec()), t);
+                    debug!("usi received {} : size {} ", array_to_hex_string(b[..t].to_vec()), t);
                 }
                 // for ch in &mut b[..t] {
                 //     //TODO, push whole slice

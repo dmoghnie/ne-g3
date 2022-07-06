@@ -142,7 +142,7 @@ impl Modem {
 
     fn process_usi_in_message(&mut self, msg: &usi::InMessage) {
         if let Some(msg) = adp::usi_message_to_message(&msg) {
-            log::trace!(
+            log::debug!(
                 "process_usi_in_message: state {:?}: msg: {:?}",
                 self.state,
                 msg

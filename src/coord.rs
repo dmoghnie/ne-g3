@@ -141,7 +141,7 @@ impl Coordinator {
 
     fn process_usi_in_message(&mut self, msg: &usi::InMessage) {
         if let Some(msg) = adp::usi_message_to_message(&msg) {
-            log::trace!(
+            log::debug!(
                 "process_usi_in_message: state {:?}: msg: {:?}",
                 self.state,
                 msg
@@ -163,7 +163,7 @@ impl Coordinator {
                     log::warn!("Received a message in an invalid state");
                 }
             }
-            log::trace!("sending to network manager : {:?}", self.net_tx.send(msg));
+            log::debug!("sending to network manager : {:?}", self.net_tx.send(msg));
         } else {
             log::warn!("Failed to parse usi message: {:?}", msg);
         }

@@ -184,7 +184,7 @@ impl TunDevice {
                     Ok(tun_msg) => {
                         match tun_msg.get_payload() {
                             TunPayload::Data(data) => {
-                                log::trace!("TUN interface sending Packet {:?}", data);
+                                log::debug!("TUN interface sending Packet {:?}", data);
                                 match iface_writer.send(&data) {
                                     Ok(size) => {
                                         log::trace!("TUN interface wrote {} bytes", size)
@@ -377,9 +377,10 @@ impl NetworkManager {
             loop {
                 match rx.try_recv() {
                     Ok(msg) => {
-                        log::trace!("Network manager received message : {:?}", msg);
+                        log::debug!("Network manager received {:?}", msg);
                         match msg {
                             adp::Message::AdpG3DataEvent(g3_data) => {
+                                log::trace!("Network manager received data  {} bytes", g3_data.nsdu.len());
                                 if let Some((payload, short_addr)) =
                                     Self::ipv6_to_tun_payload_and_short_addr(&g3_data.nsdu)
                                 {
