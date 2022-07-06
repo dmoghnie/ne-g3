@@ -9,6 +9,7 @@ mod lbp_functions;
 mod lbp_manager;
 mod modem;
 mod network_manager;
+mod ipv6_frag_manager;
 mod request;
 mod usi;
 

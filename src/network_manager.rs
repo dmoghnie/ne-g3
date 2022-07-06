@@ -19,6 +19,7 @@ use pnet_packet::{
 
 use crate::app_config;
 use std::sync::atomic::Ordering;
+use crate::ipv6_frag_manager;
 
 #[cfg(target_os = "macos")]
 use tun::{self, AsyncDevice, Configuration, TunPacket, TunPacketCodec};
@@ -145,18 +146,22 @@ impl TunDevice {
                                     log::warn!("Protocol IPV4 not implemented yet");
                                 }
                                 PacketProtocol::IPv6 => {
-                                    match self.listener.send(TunMessage::new(
-                                        self.short_addr,
-                                        TunPayload::Data(buf[..size].to_vec()),
-                                    )) {
-                                        Ok(_) => {}
-                                        Err(e) => {
-                                            log::warn!(
-                                                "failed to send TunMessage to listener {}",
-                                                e
-                                            )
+                                    let packet = Ipv6Packet::new(&buf[..size]).unwrap();
+                                    for pkt in ipv6_frag_manager::fragment_packet(packet, 1280){
+                                        match self.listener.send(TunMessage::new(
+                                            self.short_addr,
+                                            TunPayload::Data(pkt),
+                                        )) {
+                                            Ok(_) => {}
+                                            Err(e) => {
+                                                log::warn!(
+                                                    "failed to send TunMessage to listener {}",
+                                                    e
+                                                )
+                                            }
                                         }
                                     }
+
                                 }
                                 PacketProtocol::Other(_) => {}
                             }
