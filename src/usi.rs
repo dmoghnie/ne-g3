@@ -68,8 +68,10 @@ impl OutMessage {
             common::LEN_LO_PROTOCOL(self.data.len() as u16) + common::TYPE_PROTOCOL(self.protocol),
         );
 
+        log::warn!("{} *********** {}, {}", self.data.len(), v[0], v[1]);
+
         if let Some(cmd) = self.data.get(0) {
-            if self.protocol == common::PROTOCOL_PRIME_API {
+            if self.protocol == common::PROTOCOL_PRIME_API || self.protocol == common::PROTOCOL_ADP_G3 || self.protocol == common::PROTOCOL_COORD_G3{
                 v.push(
                     common::LEN_EX_PROTOCOL(self.data.len() as u16) + common::CMD_PROTOCOL(*cmd),
                 );
@@ -103,7 +105,7 @@ impl OutMessage {
             | common::PROTOCOL_COORD_G3 => {
                 let crc = crc::evalCrc16(&v);
                 v.push((crc >> 8) as u8);
-                v.push(crc as u8);
+                v.push((crc & 0xFF) as u8);
             }
 
             common::PROTOCOL_PRIME_API => {
@@ -175,7 +177,10 @@ impl InMessage {
         }
         if let Some(proto) = self.buf.get(common::TYPE_PROTOCOL_OFFSET as usize) {
             self.protocol_type = common::TYPE_PROTOCOL(*proto).into();
-            if self.protocol_type.unwrap() == common::PROTOCOL_PRIME_API {
+            if self.protocol_type.unwrap() == common::PROTOCOL_PRIME_API ||
+                self.protocol_type.unwrap() == common::PROTOCOL_ADP_G3 ||
+                self.protocol_type.unwrap() == common::PROTOCOL_COORD_G3
+                {
                 if let (Some(b1), Some(b2), Some(b3)) = (
                     self.buf.get(common::LEN_PROTOCOL_HI_OFFSET as usize),
                     self.buf.get(common::LEN_PROTOCOL_LO_OFFSET as usize),
@@ -194,6 +199,7 @@ impl InMessage {
         }
     }
     fn check_crc(&self) -> bool {
+        log::trace!("check_crc : {:?}", self);
         if let Some(pt) = self.protocol_type {
             match pt {
                 common::MNGP_PRIME_GETQRY
@@ -225,7 +231,10 @@ impl InMessage {
                     if let Some(tb) = self.buf.get(self.buf.len() - (crc_len)..) {
                         let rx_crc = (tb[0] as u16) << 8 | (tb[1] as u16);
                         if let Some(d) = self.buf.get(0..(self.payload_len + 2)) {
-                            return rx_crc == crc::evalCrc16(&d.to_vec());
+                            
+                            let c_rx_crc = crc::evalCrc16(&d.to_vec());
+                            log::trace!("************ computed crc {} : received crc {}", c_rx_crc, rx_crc);
+                            return c_rx_crc == rx_crc;
                         }
                     }
                 }
@@ -404,7 +413,8 @@ where
                         Message::UsiOut(cmd) => {
                             // self.send(&cmd);
                             if let Some(buf) = cmd.to_usi() {
-                                // log::info!("--> {}", common::to_hex_string(&buf));
+                                // log::trace!("--> {}", common::to_hex_string(&buf));
+                                log::trace!("Writing {} bytes to usi", buf.len());
                                 match sender.write_all(&buf) {
                                     Ok(()) => {},
                                     Err(ref e) => {

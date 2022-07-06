@@ -74,8 +74,8 @@ pub fn get_protocol_len(A: u16, B: u16) -> u16 {
 pub fn get_protocol_xlen(A: u8, B: u8, C: u8) -> u16 {
     return ((A as u16) << LEN_PROTOCOL_HI_SHIFT)
         + ((B as u16) >> LEN_PROTOCOL_LO_SHIFT)
-        + ((C & XLEN_PROTOCOL_MSK) as u16)
-        << XLEN_PROTOCOL_SHIFT_L;
+        + (((C & XLEN_PROTOCOL_MSK) as u16)
+        << XLEN_PROTOCOL_SHIFT_L);
 }
 
 pub fn LEN_HI_PROTOCOL(len: u16) -> u8 {
@@ -85,7 +85,7 @@ pub fn LEN_LO_PROTOCOL(len: u16) -> u8 {
     ((len << LEN_PROTOCOL_LO_SHIFT) & LEN_PROTOCOL_LO_MSK as u16) as u8
 }
 pub fn LEN_EX_PROTOCOL(len: u16) -> u8 {
-    return ((len & 0x0400) >> 3) as u8;
+    return ((len & 0x0c00) >> 4) as u8;
 }
 pub fn CMD_PROTOCOL(cmd: u8) -> u8 {
     cmd & CMD_PROTOCOL_MSK
