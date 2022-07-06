@@ -65,7 +65,7 @@ fn main() {
         .unwrap_or(false);
 
     log::info!("Port : {}, coordinator {}", &tty_path, is_coordinator);
-    let mut port = serialport::new(tty_path, 460_800)
+    let mut port = serialport::new(tty_path, 230_400)
         .timeout(Duration::from_millis(10))
         .open()
         .expect("Failed to open port {}");
