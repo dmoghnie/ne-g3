@@ -54,7 +54,7 @@ impl OutMessage {
         }
     }
     pub fn to_usi(&self) -> Option<Vec<u8>> {
-        let mut v: Vec<u8> = Vec::with_capacity(1024); //TODO define those limits
+        let mut v: Vec<u8> = Vec::with_capacity(2048); //TODO define those limits
                                                        //Header is 2 bytes
                                                        //Cmd is first byte in the data
                                                        //in case of prime, the cmd byte when serializing contains the ex len

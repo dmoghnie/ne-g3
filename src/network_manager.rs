@@ -129,7 +129,7 @@ impl TunDevice {
             &["addr", "add", "dev", iface.name(), &format!("{}/64", ula)],
         );
         cmd("ip", "ip", &["link", "set", "up", "dev", iface.name()]);
-        // cmd("ifconfig", "ifconfig", &[iface.name(), "mtu", "1280"]);
+        cmd("ifconfig", "ifconfig", &[iface.name(), "mtu", "1280"]);
         let iface = Arc::new(iface);
         let iface_writer = Arc::clone(&iface);
         let iface_reader = Arc::clone(&iface);
@@ -146,15 +146,15 @@ impl TunDevice {
                                     log::warn!("Protocol IPV4 not implemented yet");
                                 }
                                 PacketProtocol::IPv6 => {
-                                    let packet = Ipv6Packet::new(&buf[..size])
-                                    .unwrap();
-                                    let pkts = ipv6_frag_manager::fragment_packet(packet, 1280);
-                                    log::info!("Tun message fragmented into {} packets ", pkts.len());
-                                    for pkt in pkts{
+                                    // let packet = Ipv6Packet::new(&buf[..size])
+                                    // .unwrap();
+                                    // let pkts = ipv6_frag_manager::fragment_packet(packet, 1280);
+                                    // log::info!("Tun message fragmented into {} packets ", pkts.len());
+                                    // for pkt in pkts{
                                         
                                         match self.listener.send(TunMessage::new(
                                             self.short_addr,
-                                            TunPayload::Data(pkt),
+                                            TunPayload::Data(buf[..size].to_vec()),
                                         )) {
                                             Ok(_) => {}
                                             Err(e) => {
@@ -164,8 +164,8 @@ impl TunDevice {
                                                 )
                                             }
                                         }
-                                        sleep(Duration::from_millis(10));
-                                    }
+                                        // sleep(Duration::from_millis(10));
+                                    // }
 
                                 }
                                 PacketProtocol::Other(_) => {}
