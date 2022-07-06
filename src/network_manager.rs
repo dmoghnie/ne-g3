@@ -139,7 +139,7 @@ impl TunDevice {
             loop {
                 match iface_reader.recv(&mut buf) {
                     Ok(size) => {
-                        log::trace!("tun received {} bytes", size);
+                        log::info!("tun received {} bytes", size);
                         if size > 0 {
                             match infer_proto(&buf) {
                                 PacketProtocol::IPv4 => {
@@ -149,7 +149,7 @@ impl TunDevice {
                                     let packet = Ipv6Packet::new(&buf[..size])
                                     .unwrap();
                                     let pkts = ipv6_frag_manager::fragment_packet(packet, 1280);
-                                    log::trace!("Tun message fragmented into {} packets ", pkts.len());
+                                    log::info!("Tun message fragmented into {} packets ", pkts.len());
                                     for pkt in pkts{
                                         
                                         match self.listener.send(TunMessage::new(
@@ -187,7 +187,7 @@ impl TunDevice {
                                 log::debug!("TUN interface sending Packet {:?}", data);
                                 match iface_writer.send(&data) {
                                     Ok(size) => {
-                                        log::trace!("TUN interface wrote {} bytes", size)
+                                        log::info!("TUN interface wrote {} bytes", size)
                                     }
                                     Err(e) => {
                                         log::warn!("TUN interface failed to write data : {}", e)
@@ -259,9 +259,9 @@ impl NetworkManager {
         Self::ipv4_from_short_addr(short_addr)
     }
     pub fn pan_id_and_short_addr_from_ipv6(ipv6: &Ipv6Addr) -> (u16, u16) {
-        log::trace!("---> pan_id_and_short_addr_from_ipv6 : {} ", ipv6);
+        log::info!("---> pan_id_and_short_addr_from_ipv6 : {} ", ipv6);
         let segments = ipv6.segments();
-        log::trace!("---> pan_id_and_short_addr_from_ipv6 : {:?} ", segments);
+        log::info!("---> pan_id_and_short_addr_from_ipv6 : {:?} ", segments);
         (segments[4], segments[7])
     }
     pub fn dscp_ecn_to_traffic_class(dscp: u8, ecn: u8) -> u8 {
@@ -309,7 +309,7 @@ impl NetworkManager {
     }
 
     pub fn ipv4_from_ipv6(buf: &mut Vec<u8>) -> Option<(Vec<u8>, u16, u16)> {
-        log::trace!("-->ipv4_from_ipv6 : {:?}", buf);
+        log::info!("-->ipv4_from_ipv6 : {:?}", buf);
         let ipv6_pkt = Ipv6Packet::new(buf)?;
         let dst = Self::ipv4_addr_from_ipv6(ipv6_pkt.get_destination());
         let src = Self::ipv4_addr_from_ipv6(ipv6_pkt.get_source());
@@ -370,7 +370,7 @@ impl NetworkManager {
 
     pub fn start(mut self, mut rx: flume::Receiver<adp::Message>) {
         let (tun_tx, mut tun_rx) = flume::unbounded::<TunMessage>();
-        log::trace!("network manager starting ...");
+        log::info!("network manager starting ...");
 
         thread::spawn(move || {
             let mut buffer_available = true;
@@ -380,12 +380,12 @@ impl NetworkManager {
                         log::debug!("Network manager received {:?}", msg);
                         match msg {
                             adp::Message::AdpG3DataEvent(g3_data) => {
-                                log::trace!("Network manager received data  {} bytes", g3_data.nsdu.len());
+                                log::info!("Network manager received data  {} bytes", g3_data.nsdu.len());
                                 if let Some((payload, short_addr)) =
                                     Self::ipv6_to_tun_payload_and_short_addr(&g3_data.nsdu)
                                 {
                                     if let Some(tx) = self.tun_devices.get(&short_addr) {
-                                        log::trace!("found sender for short addr {} -- sending TunPayload::Data", short_addr);
+                                        log::info!("found sender for short addr {} -- sending TunPayload::Data", short_addr);
                                         match tx.send(TunMessage {
                                             short_addr: short_addr,
                                             payload: payload,
@@ -404,7 +404,7 @@ impl NetworkManager {
                             adp::Message::AdpG3NetworkStartResponse(network_start_response) => {
                                 if network_start_response.status == EAdpStatus::G3_SUCCESS {
                                     let short_addr = 0u16; //TODO, get the actual address from configuration
-                                    log::trace!("received network start response, starting interface for address {}", short_addr);
+                                    log::info!("received network start response, starting interface for address {}", short_addr);
                                     if self.tun_devices.contains_key(&short_addr) {
                                         log::warn!(
                                             "Received network start for device already started"
@@ -435,7 +435,7 @@ impl NetworkManager {
                                 }
                             }
                             adp::Message::AdpG3BufferEvent(event) => {
-                                log::trace!("Received buffer ready : {}", event.buffer_ready);
+                                log::info!("Received buffer ready : {}", event.buffer_ready);
                                 buffer_available = event.buffer_ready;
                             }
                             _ => {}
@@ -448,11 +448,11 @@ impl NetworkManager {
                         Ok(msg) => {
                             match msg.payload {
                                 TunPayload::Data(pkt) => {
-                                    log::trace!("send {} bytes to G3", pkt.len());
+                                    log::info!("send {} bytes to G3", pkt.len());
 
                                     // let mut ipv6 = Ipv6Packet::new_unchecked(pkt);
                                     // ipv6.set_src_addr(Self::ipv6_from_short_addr(*app_config::PAN_ID, msg.short_addr).into());
-                                    // log::trace!("ipv6 pkt : {:?}", ipv6);
+                                    // log::info!("ipv6 pkt : {:?}", ipv6);
                                     let data_request = AdpDataRequest::new(
                                         rand::thread_rng().gen(),
                                         &pkt,
@@ -464,7 +464,7 @@ impl NetworkManager {
                                 TunPayload::Stop => { //Should we use this as a notification that the device is stopped or should we have a separate message
                                 }
                                 TunPayload::Error(e) => {
-                                    log::trace!("Received error from device");
+                                    log::info!("Received error from device");
                                 }
                             }
                         }

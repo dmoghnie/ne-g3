@@ -1205,7 +1205,7 @@ impl AdpG3DataEvent {
             let link_indicator = msg.buf[1];
             
                 let size = (msg.buf[2] as u16) << 8 | (msg.buf[3] as u16);
-                log::trace!("********** [{}, {}] nsdu length {}", msg.buf[2], msg.buf[3], size);
+                log::info!("********** [{}, {}] nsdu length {}", msg.buf[2], msg.buf[3], size);
                 return Some(AdpG3DataEvent {nsdu: msg.buf[4..(4+size) as usize].to_vec(), link_quality_indicator: link_indicator });
         }
         None

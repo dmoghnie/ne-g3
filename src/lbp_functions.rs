@@ -211,7 +211,7 @@ pub fn eap_psk_initialize(pKey: &TEapPskKey, pPskContext: &mut TEapPskContext) -
 
 
 pub fn eap_psk_initialize_tek(p_rand_p: &TEapPskRand, p_psk_context: &mut TEapPskContext) -> bool {
-    log::trace!("->EAP_PSK_InitializeTEK : {:?}, {:?}", p_rand_p, p_psk_context.m_Kdk.0);
+    log::info!("->EAP_PSK_InitializeTEK : {:?}, {:?}", p_rand_p, p_psk_context.m_Kdk.0);
     let encryptor = aes::Aes128::new_from_slice(&p_psk_context.m_Kdk.0);
     if let Ok(encryptor) = encryptor {
         let mut v = aes::cipher::generic_array::GenericArray::from(p_rand_p.0);
@@ -219,7 +219,7 @@ pub fn eap_psk_initialize_tek(p_rand_p: &TEapPskRand, p_psk_context: &mut TEapPs
         v[15] ^= 0x01;
         aes::cipher::BlockEncrypt::encrypt_block(&encryptor, &mut v);
         p_psk_context.m_Tek.0 = v.into();
-        log::trace!("->EAP_PSK_InitializeTEK : {:?}, {:?}", p_rand_p, p_psk_context.m_Tek);
+        log::info!("->EAP_PSK_InitializeTEK : {:?}, {:?}", p_rand_p, p_psk_context.m_Tek);
         true
     } else {
         log::warn!("EAP_PSK_InitializeTEK : Failed to get encryptor");
@@ -561,7 +561,7 @@ pub fn EAP_PSK_Encode_Message3(
     header.append(pRandS.0.to_vec().borrow_mut());
     header.append(au8MacS.into_bytes().to_vec().borrow_mut());
 
-    log::trace!("pRandS : {:?}", pRandS.0);
+    log::info!("pRandS : {:?}", pRandS.0);
     
     //   // prepare P-Channel content
     //   // nonce should be big endian
@@ -573,11 +573,11 @@ pub fn EAP_PSK_Encode_Message3(
     au8Nonce[14] = ((u32Nonce >> 8) & 0xFF) as u8;
     au8Nonce[15] = ((u32Nonce) & 0xFF) as u8;
 
-    log::trace!("au8Nonce : {:?}", au8Nonce);
+    log::info!("au8Nonce : {:?}", au8Nonce);
     // protected data
     let mut protected_data: Vec<u8> = Vec::new();
 
-    log::trace!("pChannel Data : {:?}", pPChannelData);
+    log::info!("pChannel Data : {:?}", pPChannelData);
     if (pPChannelData.len() > 0) {
         // result / extension = 1
         protected_data.push((u8PChannelResult << 6) | 0x20);
@@ -591,7 +591,7 @@ pub fn EAP_PSK_Encode_Message3(
         &pPskContext.m_Tek.0,
     ));
 
-    log::trace!("pPsdkContext.m_Tek.0 {:?}", pPskContext.m_Tek);
+    log::info!("pPsdkContext.m_Tek.0 {:?}", pPskContext.m_Tek);
     let len = header.len() + 4 + protected_data.len() + 16 /*TAG */;
     header[2] = ((len >> 8) & 0x00FF) as u8;
     header[3] = (len & 0x00FF) as u8;
@@ -605,7 +605,7 @@ pub fn EAP_PSK_Encode_Message3(
             aad: &header[0..(header.len()- auMacSLen)], //remove au8Mac
         }
     ) {
-        // log::trace!("data : {:X?}", data);
+        // log::info!("data : {:X?}", data);
         let (payload, tag) = data.split_at(protected_data.len());
         header[0] <<= 2;
         let mut result_vec = vec![];
@@ -656,11 +656,11 @@ pub fn EAP_PSK_Decode_Message4(
         let mut header = pHeader[0..22].to_vec(); //TODO, is this fixed?
         header[0] >>= 2;
 
-        log::trace!("TEK : {:?}", pPskContext.m_Tek);
-        log::trace!("Nonce/IV : {:X?}", au8_nonce);
-        log::trace!("Header : {:X?}", header);
-        log::trace!("Data-enc : {:X?}", protected_data);
-        log::trace!("Tag : {:X?}", tag);
+        log::info!("TEK : {:?}", pPskContext.m_Tek);
+        log::info!("Nonce/IV : {:X?}", au8_nonce);
+        log::info!("Header : {:X?}", header);
+        log::info!("Data-enc : {:X?}", protected_data);
+        log::info!("Tag : {:X?}", tag);
     
         let mut data_and_tag: Vec<u8> = Vec::new();
         data_and_tag.append(protected_data.to_vec().borrow_mut());

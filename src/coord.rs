@@ -92,7 +92,7 @@ pub struct Coordinator {
 
 impl MessageHandler for Coordinator {
     fn process(&mut self, msg: usi::Message) -> bool {
-        log::trace!("->Coord : state ({:?}) : msg({:?})", self.state, msg);
+        log::info!("->Coord : state ({:?}) : msg({:?})", self.state, msg);
 
         match msg {
             usi::Message::UsiIn(ref msg) => {
@@ -100,7 +100,7 @@ impl MessageHandler for Coordinator {
             }
             usi::Message::UsiOut(_) => {}
             usi::Message::HeartBeat(time) => {
-                log::trace!("Adp received heartbeat {:?}", time);
+                log::info!("Adp received heartbeat {:?}", time);
                 // if self.state == State::Ready{
                 //     self.joinNetwork();
                 // }
@@ -113,7 +113,7 @@ impl MessageHandler for Coordinator {
 
             }
         }
-        log::trace!("<-Coord : state ({:?})", self.state);
+        log::info!("<-Coord : state ({:?})", self.state);
         return true;
     }
 }
@@ -193,7 +193,7 @@ impl Coordinator {
         match msg {
             Message::AdpG3LbpEvent(lbp_event) => {
                 if let Some(lbp_message) = lbp::adp_message_to_lbp_message(lbp_event) {
-                    log::trace!("Received lbp_event {:?}", lbp_message);
+                    log::info!("Received lbp_event {:?}", lbp_message);
                     if let Some(result) = self.lbp_manager.process_msg(&lbp_message) {
                         self.send_cmd(result.into());
                     }
@@ -217,7 +217,7 @@ impl Coordinator {
             }
             _ => {}
         }
-        log::trace!(
+        log::info!(
             "process_state_setting_parameters: mac index : {}, adp index : {} : msg: {:?}",
             self.mac_param_idx,
             self.adp_param_idx,
@@ -243,7 +243,7 @@ impl Coordinator {
         }
     }
     fn setParameters(&mut self) {
-        log::trace!(
+        log::info!(
             "setParameters: mac index : {}, adp index : {}",
             self.mac_param_idx,
             self.adp_param_idx

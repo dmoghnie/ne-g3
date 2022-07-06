@@ -194,7 +194,7 @@ impl LbpManager {
 
         let result: Option<Vec<u8>> = None;
 
-        log::trace!("[BS] Process Joining EAP T1");
+        log::info!("[BS] Process Joining EAP T1");
 
         if eap_psk_decode_message2(
             p_eap_data,
@@ -203,7 +203,7 @@ impl LbpManager {
             &mut rand_s,
             &mut rand_p,
         ) {
-            log::trace!("[BS] Decoded Message2.");
+            log::info!("[BS] Decoded Message2.");
 
             if rand_s.0 != p_device.m_rand_s.0 {
                 log::warn!("[BS] ERROR: Bad RandS received");
@@ -239,7 +239,7 @@ impl LbpManager {
                 p_data.append(app_config::g_au8RekeyGMK.to_vec().borrow_mut());
             }
 
-            log::trace!("[BS] Encoding Message3.");
+            log::info!("[BS] Encoding Message3.");
 
             p_device.data = EAP_PSK_Encode_Message3(
                 &p_device.m_psk_context,
@@ -283,7 +283,7 @@ impl LbpManager {
         let mut u8_pchannel_result: u8 = 0;
         let mut u32_nonce: u32 = 0;
         let mut channel_data: Vec<u8> = Vec::new();
-        log::trace!("[BS] Process Joining EAP T3.");
+        log::info!("[BS] Process Joining EAP T3.");
 
         if EAP_PSK_Decode_Message4(
             p_eap_data,
@@ -321,7 +321,7 @@ impl LbpManager {
         return *current;
     }
     fn process_joining0(&mut self, msg: &JoiningMessage) -> Option<Vec<u8>> {
-        log::trace!("[BS] Process Joining 0.");
+        log::info!("[BS] Process Joining 0.");
         let device = self
             .device_manager
             .add_or_get_by_addr(&msg.ext_addr)
@@ -347,7 +347,7 @@ impl LbpManager {
                     &device.m_rand_s,
                     &self.g_id_s,
                 ));
-                log::trace!("Process joining message, out_message {:?}", device.data);
+                log::info!("Process joining message, out_message {:?}", device.data);
                 device.state = DeviceState::BS_STATE_SENT_EAP_MSG_1;
                 self.u8_eap_identifier += 1;
                 return Some(
@@ -386,14 +386,14 @@ impl LbpManager {
                             &mut self.g_u32_nonce,
                         ) {
                             device.state = DeviceState::BS_STATE_SENT_EAP_MSG_3;
-                            log::trace!("[BS] Slot updated to BS_STATE_SENT_EAP_MSG_3");
+                            log::info!("[BS] Slot updated to BS_STATE_SENT_EAP_MSG_3");
                             return Some(result);
                         } else {
                             /* Abort current BS process */
-                            log::trace!("[BS] LBP error processing EAP T1.");
+                            log::info!("[BS] LBP error processing EAP T1.");
                             device.state = DeviceState::BS_STATE_WAITING_JOINNING;
                             device.uc_pending_confirms = 0;
-                            log::trace!("[BS] Slot updated to BS_STATE_WAITING_JOINNING");
+                            log::info!("[BS] Slot updated to BS_STATE_WAITING_JOINNING");
                         }
                     } else if pu8_tsubfield == EAP_PSK_T3
                         && (device.state == DeviceState::BS_STATE_WAITING_EAP_MSG_4
@@ -406,13 +406,13 @@ impl LbpManager {
                             &mut self.u8_eap_identifier,
                         ) {
                             device.state = DeviceState::BS_STATE_SENT_EAP_MSG_ACCEPTED;
-                            log::trace!("[BS] Slot updated to BS_STATE_SENT_EAP_MSG_ACCEPTED");
+                            log::info!("[BS] Slot updated to BS_STATE_SENT_EAP_MSG_ACCEPTED");
                             return Some(result);
                         } else {
                             log::warn!("[BS] LBP error processing EAP T3.");
                             device.state = DeviceState::BS_STATE_WAITING_JOINNING;
                             device.uc_pending_confirms = 0;
-                            log::trace!("[BS] Slot updated to BS_STATE_WAITING_JOINNING");
+                            log::info!("[BS] Slot updated to BS_STATE_WAITING_JOINNING");
                         }
                     } else {
                         /* Abort current BS process */
@@ -420,7 +420,7 @@ impl LbpManager {
                         log::warn!("[BS] protocol error. from device {:?}", device);
                         device.state = DeviceState::BS_STATE_WAITING_JOINNING;
                         device.uc_pending_confirms = 0;
-                        log::trace!(
+                        log::info!(
                             "[BS] Slot updated to BS_STATE_WAITING_JOINNING device {:?}",
                             device
                         );
@@ -431,7 +431,7 @@ impl LbpManager {
 
                 // device.state = DeviceState::BS_STATE_WAITING_JOINNING;
                 // device.uc_pending_confirms = 0;
-                // log::trace!(
+                // log::info!(
                 //     "[BS] Slot updated to BS_STATE_WAITING_JOINNING device {:?}",
                 //     device
                 // );
@@ -489,7 +489,7 @@ impl LbpManager {
                                 device.uc_pending_confirms = 0;
                             }
                         }
-                        log::trace!("device log {:?}", device);
+                        log::info!("device log {:?}", device);
                     }
                 } else {
                     device.state = DeviceState::BS_STATE_WAITING_JOINNING;

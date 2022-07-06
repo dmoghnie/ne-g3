@@ -89,7 +89,7 @@ pub struct Modem {
 
 impl MessageHandler for Modem {
     fn process(&mut self, msg: usi::Message) -> bool {
-        log::trace!("->Modem : state ({:?}) : msg({:?})", self.state, msg);
+        log::info!("->Modem : state ({:?}) : msg({:?})", self.state, msg);
 
         match msg {
             usi::Message::UsiIn(ref msg) => {
@@ -97,7 +97,7 @@ impl MessageHandler for Modem {
             }
             usi::Message::UsiOut(_) => {}
             usi::Message::HeartBeat(time) => {
-                log::trace!(
+                log::info!(
                     "Adp received heartbeat: {:?}, state: {:?}",
                     time,
                     self.state
@@ -114,7 +114,7 @@ impl MessageHandler for Modem {
                 self.init();
             }
         }
-        log::trace!("<-Modem : state ({:?}) : msg({:?})", self.state, msg);
+        log::info!("<-Modem : state ({:?}) : msg({:?})", self.state, msg);
         return true;
     }
 }
@@ -195,7 +195,7 @@ impl Modem {
                 }
             },
             Message::AdpG3SetMacResponse(mac_set_response) => {
-                log::trace!("Mac Set response {:?}", mac_set_response);
+                log::info!("Mac Set response {:?}", mac_set_response);
                 self.state = State::Ready;
             }
             _ => {}
@@ -212,7 +212,7 @@ impl Modem {
             }
             _ => {}
         }
-        log::trace!(
+        log::info!(
             "process_state_setting_parameters: mac index : {}, adp index : {} : msg: {:?}",
             self.mac_param_idx,
             self.adp_param_idx,
@@ -252,7 +252,7 @@ impl Modem {
         }
     }
     fn setParameters(&mut self) {
-        log::trace!(
+        log::info!(
             "setParameters: mac index : {}, adp index : {}",
             self.mac_param_idx,
             self.adp_param_idx

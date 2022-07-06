@@ -39,17 +39,17 @@ use crate::usi::{Message, MessageHandler, OutMessage, UsiSender};
 const TIMER_RESOLUTION: Duration = Duration::from_millis(20000);
 
 fn main() {
-    env_logger::Builder::from_env(Env::default().default_filter_or("trace")).init();
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
     let s = app_config::SETTINGS.read().unwrap();
 
-    log::trace!("Settings : {:?}", s);
+    log::info!("Settings : {:?}", s);
 
-    log::trace!(
+    log::info!(
         "CONF_CONTEXT_INFORMATION_TABLE_0 : {:X?}",
         network_manager::NetworkManager::CONF_CONTEXT_INFORMATION_TABLE_0(s.g3.pan_id)
     );
-    log::trace!(
+    log::info!(
         "ipv6 from short addr {:?}",
         network_manager::NetworkManager::ipv6_from_short_addr(s.g3.pan_id, 5)
     );
@@ -64,7 +64,7 @@ fn main() {
         .parse()
         .unwrap_or(false);
 
-    log::trace!("Port : {}, coordinator {}", &tty_path, is_coordinator);
+    log::info!("Port : {}, coordinator {}", &tty_path, is_coordinator);
     let mut port = serialport::new(tty_path, 460_800)
         .timeout(Duration::from_millis(10))
         .open()
@@ -87,7 +87,7 @@ fn main() {
     let network_manager = network_manager::NetworkManager::new(s.g3.pan_id, usi_tx);
 
     network_manager.start(rx);
-    log::trace!("Network Manager started ...");
+    log::info!("Network Manager started ...");
     
     let t2 = thread::spawn(move || {
         let message_handler: Option<Box<dyn MessageHandler>>;
@@ -111,7 +111,7 @@ fn main() {
     });
     let system_tx = app_tx.clone();
     let result = system_tx.send(Message::SystemStartup);
-    log::trace!("Sending system startup message result : {:?}", result);
+    log::info!("Sending system startup message result : {:?}", result);
     let system_handle = thread::spawn(move || loop {
         system_tx.send(Message::HeartBeat(SystemTime::now()));
         thread::sleep(TIMER_RESOLUTION);

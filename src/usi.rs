@@ -263,7 +263,7 @@ impl InMessage {
     }
 
     fn process_ch(&mut self, ch: u8) {
-        // trace!("usi::process_ch {}", ch);
+        // info!("usi::process_ch {}", ch);
         match self.rxState {
             RxState::RxIdle => {
                 if ch == common::PROTOCOL_DELIMITER {
@@ -364,7 +364,7 @@ where
                 self.buf.extend(b[..t].iter());
                 // self.buf.append(b[..t].to_vec());
                 // let ch = b[0];
-                // trace!("Received {}", ch);
+                // info!("Received {}", ch);
                 self.message.process(&mut self.buf);
                 match self.message.get_state() {
                     usi::RxState::RxDone => {
@@ -404,7 +404,7 @@ where
                         Message::UsiOut(cmd) => {
                             // self.send(&cmd);
                             if let Some(buf) = cmd.to_usi() {
-                                // log::trace!("--> {}", common::to_hex_string(&buf));
+                                // log::info!("--> {}", common::to_hex_string(&buf));
                                 match sender.write_all(&buf) {
                                     Ok(()) => {},
                                     Err(ref e) => {
@@ -426,7 +426,7 @@ where
 // impl<'a, T: Read + Send, S: Write + Send> UsiSender for Port<'a, T, S> {
 //     fn send(&mut self, cmd: &OutMessage) -> std::result::Result<(), String> {
 //         if let Some(buf) = cmd.to_usi() {
-//             log::trace!("--> {}", common::to_hex_string(&buf));
+//             log::info!("--> {}", common::to_hex_string(&buf));
 //             match self.sender.write_all(&buf) {
 //                 Ok(()) => return Ok(()),
 //                 Err(ref e) => return Err(String::from(e.to_string())),

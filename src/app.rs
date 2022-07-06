@@ -40,23 +40,23 @@ impl<'a> App<'a> {
     }
 
     pub fn process_msg(&mut self, msg: &usi::Message) -> bool {
-        log::trace!("App processing message {:?}", msg);
+        log::info!("App processing message {:?}", msg);
         if let Some(s) = &self.state {
             match msg {
                 usi::Message::UsiIn(msg) => {
                     if let Some(m) = adp::usi_message_to_message(msg) {
                         let new_state = s.on_msg(self, &m);
                         if new_state.is_none() {
-                            log::trace!("State {}, on exit", s.get_name());
+                            log::info!("State {}, on exit", s.get_name());
                             s.on_exit(self);
                             return false;
                         }
                         let new_state = new_state.unwrap();
                         if new_state.get_name() != s.get_name() {
-                            log::trace!("State {}, on exit", s.get_name());
+                            log::info!("State {}, on exit", s.get_name());
                             s.on_exit(self);
 
-                            log::trace!("State {}, on enter", new_state.get_name());
+                            log::info!("State {}, on enter", new_state.get_name());
                             self.state = Some(new_state);
                             if let Some(s) = &self.state {
                                 s.on_enter(self);
@@ -70,7 +70,7 @@ impl<'a> App<'a> {
                     log::warn!("App received a UsiCommand");
                 }
                 usi::Message::HeartBeat(time) => {
-                    log::trace!("Adp received heartbeat {:?}", time);
+                    log::info!("Adp received heartbeat {:?}", time);
                 }
                 _ => {}
             }
@@ -100,7 +100,7 @@ impl StateImpl for Start {
     }
 
     fn on_msg(&self, app: &App, msg: &adp::Message) -> Option<Box<dyn StateImpl>> {
-        log::trace!("received message : {:?}", msg);
+        log::info!("received message : {:?}", msg);
         return Some(Box::new(SetupParameters::new()));
     }
 
@@ -198,7 +198,7 @@ impl StateImpl for SetupParameters {
     }
 
     fn on_msg(&self, app: &App, msg: &adp::Message) -> Option<Box<dyn StateImpl>> {
-        log::trace!("received message : {:?}", msg);
+        log::info!("received message : {:?}", msg);
         if let Some(p) = self.parameters.borrow_mut().pop() {
             self.send_parameter(app, p);
             let parameters = self.parameters.clone();
@@ -206,10 +206,10 @@ impl StateImpl for SetupParameters {
                 parameters: parameters,
             }));
         } else if app.is_coord {
-            log::trace!("starting coordinator");
+            log::info!("starting coordinator");
             return Some(Box::new(NetworkStart {}));
         } else {
-            log::trace!("not coordinator");
+            log::info!("not coordinator");
             return Some(Box::new(Idle {}));
         }
     }
@@ -233,7 +233,7 @@ impl StateImpl for Idle {
     }
 
     fn on_msg(&self, app: &App, msg: &adp::Message) -> Option<Box<dyn StateImpl>> {
-        log::trace!("received message : {:?}", msg);
+        log::info!("received message : {:?}", msg);
         // return Some(Box::new(GetVersion{}));
         match msg {
             adp::Message::AdpG3DiscoveryResponse(msg) => {
@@ -274,7 +274,7 @@ impl StateImpl for SetSecurityLevel {
     }
 
     fn on_msg(&self, app: &App, msg: &adp::Message) -> Option<Box<dyn StateImpl>> {
-        log::trace!("state {}, msg {:?}", self.get_name(), msg);
+        log::info!("state {}, msg {:?}", self.get_name(), msg);
         return Some(Box::new(GetEUI64 {}));
     }
 
@@ -296,7 +296,7 @@ impl StateImpl for GetVersion {
     }
 
     fn on_msg(&self, app: &App, msg: &adp::Message) -> Option<Box<dyn StateImpl>> {
-        log::trace!("state {}, msg {:?}", self.get_name(), msg);
+        log::info!("state {}, msg {:?}", self.get_name(), msg);
         return Some(Box::new(SetSecurityLevel {}));
     }
 
@@ -379,7 +379,7 @@ impl StateImpl for GetEUI64 {
     }
 
     fn on_msg(&self, app: &App, msg: &adp::Message) -> Option<Box<dyn StateImpl>> {
-        log::trace!("state {}, msg {:?}", self.get_name(), msg);
+        log::info!("state {}, msg {:?}", self.get_name(), msg);
         return Some(Box::new(GetEUI64 {}));
     }
 
@@ -401,7 +401,7 @@ impl StateImpl for NetworkStart {
     }
 
     fn on_msg(&self, app: &App, msg: &adp::Message) -> Option<Box<dyn StateImpl>> {
-        log::trace!("state {}, msg {:?}", self.get_name(), msg);
+        log::info!("state {}, msg {:?}", self.get_name(), msg);
         Some(Box::new(Idle {}))
     }
 
@@ -428,7 +428,7 @@ impl StateImpl for GetAttributes {
     }
 
     fn on_msg(&self, app: &App, msg: &adp::Message) -> Option<Box<dyn StateImpl>> {
-        log::trace!("state {}, msg {:?}", self.get_name(), msg);
+        log::info!("state {}, msg {:?}", self.get_name(), msg);
         match msg {
             adp::Message::AdpG3GetResponse(get_response) => {}
             adp::Message::AdpG3GetMacResponse(get_mac_response) => {}
