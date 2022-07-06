@@ -443,7 +443,7 @@ impl NetworkManager {
                     }
                     Err(_) => {}
                 }
-                // if buffer_available {
+                 if buffer_available {
                     match tun_rx.try_recv() {
                         Ok(msg) => {
                             match msg.payload {
@@ -470,7 +470,7 @@ impl NetworkManager {
                         }
                         Err(_) => {}
                     }
-                // }
+                 }
                 sleep(Duration::from_millis(10)); //TODO, spin threads and recv instead of try_recv
             }
         });
