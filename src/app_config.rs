@@ -11,7 +11,7 @@ use crate::network_manager::NetworkManager;
 // pub const PAN_ID: u16 = 0x781D;
 // pub const SENDER: [u8; 2] = [0x0, 0x1];
 // pub const RECEIVER: [u8; 2] = [0x0, 0x2];
-pub const BAND: TAdpBand = TAdpBand::ADP_BAND_CENELEC_A;
+pub const BAND: TAdpBand = TAdpBand::ADP_BAND_FCC;
 
 // pub const CONF_PSK_KEY: [u8; 16] = [
 //     0xab, 0x10, 0x34, 0x11, 0x45, 0x11, 0x1b, 0xc3, 0xc1, 0x2d, 0xe8, 0xff, 0x11, 0x14, 0x22, 0x4,
