@@ -163,7 +163,15 @@ impl Coordinator {
                     log::warn!("Received a message in an invalid state");
                 }
             }
-            log::debug!("sending to network manager : {:?}", self.net_tx.send(msg));
+            match self.net_tx.send(msg){
+                Ok(_) => {
+                    log::debug!("sent to network manager ");
+                },
+                Err(e) => {
+                    log::warn!("Error sending to network manager {:?}", e);
+                },
+            }
+            
         } else {
             log::warn!("Failed to parse usi message: {:?}", msg);
         }
@@ -218,9 +226,10 @@ impl Coordinator {
             _ => {}
         }
         log::info!(
-            "process_state_setting_parameters: mac index : {}, adp index : {} : msg: {:?}",
+            "process_state_setting_parameters: mac index : {}, adp index : {} : mac parameters len {} : adp parameters len {} : msg: {:?}",
             self.mac_param_idx,
             self.adp_param_idx,
+            MAC_STACK_PARAMETERS.len(), ADP_STACK_PARAMETERS.len(),
             msg
         );
         if (self.adp_param_idx + self.mac_param_idx)

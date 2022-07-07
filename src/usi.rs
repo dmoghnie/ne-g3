@@ -68,7 +68,7 @@ impl OutMessage {
             common::LEN_LO_PROTOCOL(self.data.len() as u16) + common::TYPE_PROTOCOL(self.protocol),
         );
 
-        log::warn!("{} *********** {}, {}", self.data.len(), v[0], v[1]);
+        log::trace!("{} *********** {}, {}", self.data.len(), v[0], v[1]);
 
         if let Some(cmd) = self.data.get(0) {
             if self.protocol == common::PROTOCOL_PRIME_API || self.protocol == common::PROTOCOL_ADP_G3 || self.protocol == common::PROTOCOL_COORD_G3{

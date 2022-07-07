@@ -416,6 +416,9 @@ impl NetworkManager {
                                         tun_device.start(short_addr, rx);
                                     }
                                 }
+                                else{
+                                    log::error!("Failed to start network {:?}", network_start_response.status);
+                                }
                             }
                             adp::Message::AdpG3NetworkJoinResponse(network_join_response) => {
                                 if network_join_response.status == EAdpStatus::G3_SUCCESS {
