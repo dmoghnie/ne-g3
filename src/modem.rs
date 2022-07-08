@@ -191,6 +191,7 @@ impl Modem {
             Message::AdpG3NetworkJoinResponse(join_network_response) => {
                 match join_network_response.status {
                     EAdpStatus::G3_SUCCESS => {
+                        self.set_short_addr(join_network_response.network_addr);
                         self.state = State::Ready;
                     },
                     EAdpStatus::G3_TIMEOUT => {

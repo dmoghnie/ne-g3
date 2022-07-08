@@ -452,7 +452,10 @@ impl NetworkManager {
                                         let eui64 = Self::get_extended_address_from_short_addr(short_addr).to_vec();
                                         let msg = request::AdpMacSetRequest::new(adp::EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_EXTENDED_ADDRESS, 0, 
                                             &eui64);
-                                            self.cmd_tx.send(usi::Message::UsiOut(msg.into()));
+                                            match self.cmd_tx.send(usi::Message::UsiOut(msg.into())){
+                                                Ok(_) => log::trace!("setting extended eui64 address request sent"),
+                                                Err(e) => log::error!("setting extended eui64 address request failed {}", e),
+                                            }
 
                                         tun_device.start(short_addr, rx);
                                     }
