@@ -65,7 +65,7 @@ lazy_static! {
         (adp::EAdpPibAttribute::ADP_IB_MAX_HOPS, 0, vec![0x0A]),
         (adp::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY, 0, app_config::CONF_PSK_KEY.to_vec()),
         (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 0, app_config::CONF_CONTEXT_INFORMATION_TABLE_0.to_vec()),
-        (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 1, app_config::CONF_CONTEXT_INFORMATION_TABLE_1.to_vec()),
+        // (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 1, app_config::CONF_CONTEXT_INFORMATION_TABLE_1.to_vec()),
         (
             adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL,
             0,
