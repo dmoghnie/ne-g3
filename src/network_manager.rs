@@ -20,6 +20,7 @@ use pnet_packet::{
 use crate::app_config;
 use std::sync::atomic::Ordering;
 use crate::ipv6_frag_manager;
+use crate::request;
 
 #[cfg(target_os = "macos")]
 use tun::{self, AsyncDevice, Configuration, TunPacket, TunPacketCodec};
@@ -276,6 +277,15 @@ impl NetworkManager {
         (traffic_class >> 2, traffic_class & 0b0000_0011)
     }
 
+    fn get_extended_address_from_short_addr(short_addr: u16) -> [u8; 8] {
+        let mut v = [
+            0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x0, 0x0,
+        ];
+        let b = short_addr.to_be_bytes();
+        v[6] = b[0];
+        v[7] = b[1];
+        v
+    } 
     fn ipv6_to_tun_payload_and_short_addr(buf: &Vec<u8>) -> Option<(TunPayload, u16)> {
         let mut ipv6_pkt = Ipv6Packet::new(buf)?;
         let (_, short_addr) = Self::pan_id_and_short_addr_from_ipv6(&ipv6_pkt.get_destination());
@@ -413,6 +423,12 @@ impl NetworkManager {
                                         let tun_device = TunDevice::new(short_addr, tun_tx.clone());
                                         let (tx, mut rx) = flume::unbounded::<TunMessage>();
                                         self.tun_devices.insert(short_addr, tx);
+                                        //TODO
+                                        let eui64 = Self::get_extended_address_from_short_addr(short_addr).to_vec();
+                                        let msg = request::AdpMacSetRequest::new(adp::EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_EXTENDED_ADDRESS, 0, 
+                                            &eui64);
+                                            self.cmd_tx.send(usi::Message::UsiOut(msg.into()));
+                                        
                                         tun_device.start(short_addr, rx);
                                     }
                                 }
@@ -432,6 +448,11 @@ impl NetworkManager {
                                         let tun_device = TunDevice::new(short_addr, tun_tx.clone());
                                         let (tx, mut rx) = flume::unbounded::<TunMessage>();
                                         self.tun_devices.insert(short_addr, tx);
+                                        //TODO
+                                        let eui64 = Self::get_extended_address_from_short_addr(short_addr).to_vec();
+                                        let msg = request::AdpMacSetRequest::new(adp::EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_EXTENDED_ADDRESS, 0, 
+                                            &eui64);
+                                            self.cmd_tx.send(usi::Message::UsiOut(msg.into()));
 
                                         tun_device.start(short_addr, rx);
                                     }
