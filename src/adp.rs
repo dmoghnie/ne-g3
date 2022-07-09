@@ -2,6 +2,7 @@ use crate::usi;
 use num_enum::IntoPrimitive;
 use num_enum::TryFromPrimitive;
 use std::fmt;
+use std::net::Ipv6Addr;
 use usi::InMessage;
 
 pub const G3_SERIAL_MSG_STATUS: u8 = 0;
@@ -112,6 +113,26 @@ pub const G3_SERIAL_MSG_MAC_SNIFFER_INDICATION: u8 =
 
 pub const ADP_ADDRESS_16BITS: usize = 2;
 pub const ADP_ADDRESS_64BITS: usize = 8usize;
+
+#[repr(C, packed)]
+struct ipv6_prefix {
+    pub uc_prefix_len: u8,
+	pub uc_on_link_flag: u8,
+	pub uc_auto_config_flag: u8,
+	pub ui_valid_life_time: u32,
+	pub ui_preferred_life_time: u32,
+	pub  puc_prefix: [u8; 16] //ipv6 addr size
+}
+
+impl ipv6_prefix {
+    pub fn new(prefix_len: u8, ipv6_addr: &Ipv6Addr) -> Self {
+        ipv6_prefix { uc_prefix_len: prefix_len, uc_on_link_flag: 1, uc_auto_config_flag: 1, 
+            ui_valid_life_time: 0x20C000, ui_preferred_life_time: 0x20C000, puc_prefix: ipv6_addr.octets() }
+    }
+    pub unsafe fn to_raw_data (&self) -> &[u8] {
+        ::std::slice::from_raw_parts((self as *const Self) as *const u8, ::std::mem::size_of::<Self>())
+    }
+}
 
 pub enum EAdpMac_Modulation {
     MOD_ROBO = 0,

@@ -12,6 +12,7 @@ mod network_manager;
 mod ipv6_frag_manager;
 mod request;
 mod usi;
+mod app_manager;
 
 use std::time::{Duration, SystemTime};
 use std::{env, io, str, thread};
