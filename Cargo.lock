@@ -532,6 +532,8 @@ name = "ne-g3"
 version = "0.1.0"
 dependencies = [
  "aes",
+ "byteorder",
+ "cc",
  "cfg-if",
  "clap",
  "cmac",
@@ -540,6 +542,7 @@ dependencies = [
  "env_logger",
  "flume",
  "lazy_static",
+ "libc",
  "log",
  "num_enum",
  "pnet_packet",
@@ -548,7 +551,6 @@ dependencies = [
  "serde_derive",
  "serialport",
  "thiserror",
- "tun-tap",
 ]
 
 [[package]]
@@ -998,14 +1000,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d82e1a7758622a465f8cee077614c73484dac5b836c02ff6a40d5d1010324d7"
 dependencies = [
  "serde",
-]
-
-[[package]]
-name = "tun-tap"
-version = "0.1.2"
-source = "git+https://github.com/dmoghnie/tuntap#ad7ed718e299d5855e9732b5bf30873134942fa2"
-dependencies = [
- "cc",
 ]
 
 [[package]]

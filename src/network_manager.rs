@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     intrinsics::transmute,
-    io::Error,
+    io::{Error, Read},
     net::{Ipv4Addr, Ipv6Addr},
     process::Command,
     sync::{atomic::AtomicBool, Arc},
@@ -10,6 +10,7 @@ use std::{
     vec,
 };
 
+use byteorder::{NativeEndian, WriteBytesExt, NetworkEndian};
 use config::Config;
 use pnet_packet::{
     ipv4::{Ipv4Flags, Ipv4Packet, MutableIpv4Packet},
@@ -17,12 +18,11 @@ use pnet_packet::{
     Packet,
 };
 
-use crate::app_config;
+use crate::{app_config, tun_interface::TunInterface};
 use std::sync::atomic::Ordering;
 use crate::ipv6_frag_manager;
+use crate::request;
 
-#[cfg(target_os = "macos")]
-use tun::{self, AsyncDevice, Configuration, TunPacket, TunPacketCodec};
 
 use crate::{
     adp::{self, EAdpStatus},
@@ -95,12 +95,11 @@ impl TunDevice {
         }
     }
 
-    #[cfg(target_os = "linux")]
-    pub fn start(self, short_addr: u16, mut rx: flume::Receiver<TunMessage>) {
-        use std::{thread::sleep, time::Duration};
 
-        use serde::__private::size_hint;
-        use tun_tap::{Iface, Mode};
+    
+    pub fn start(self, short_addr: u16, mut rx: flume::Receiver<TunMessage>) {
+        use std::{thread::sleep, time::Duration, io::Read, io::Write};
+
 
         use crate::app_config::PAN_ID;
         /*fd00:0:2:781d:1122:3344:5566:1 */
@@ -109,31 +108,59 @@ impl TunDevice {
             0xfd00, 0x0, 0x02, *PAN_ID, 0x1122, 0x3344, 0x5566, short_addr,
         );
 
-        let iface = Iface::without_packet_info("tun%d", Mode::Tun).unwrap();
+        let tun_interface = TunInterface::new().unwrap();
 
-        // Configure the „local“ (kernel) endpoint. Kernel is (the host) 10.107.1.3, we (the app)
-        // pretend to be 10.107.1.2.
+        cfg_if::cfg_if! {
+        if #[cfg(target_os = "linux")] {
+        
         cmd("ip",
             "ip",
             &[
                 "addr",
                 "add",
                 "dev",
-                iface.name(),
+                tun_interface.name(),
                 &format!("{}/80", local_link),
             ],
         );
+        
         cmd(
             "ip",
             "ip",
-            &["addr", "add", "dev", iface.name(), &format!("{}/64", ula)],
+            &["addr", "add", "dev", tun_interface.name(), &format!("{}/64", ula)],
         );
-        cmd("ip", "ip", &["link", "set", "up", "dev", iface.name()]);
-        cmd("ifconfig", "ifconfig", &[iface.name(), "mtu", "1280"]);
-        let iface = Arc::new(iface);
-        let iface_writer = Arc::clone(&iface);
-        let iface_reader = Arc::clone(&iface);
+        
+        cmd("ip", "ip", &["link", "set", "up", "dev", tun_interface.name()]);
+    }
+    else if #[cfg(target_os = "macos")] {
 
+        cmd("ifconfig",
+        "ifconfig",
+        &[
+            tun_interface.name(),
+            "inet6",            
+            &format!("{}/80", local_link),
+        ]);
+
+        cmd(
+            "ifconfig",
+            "ifconfig",
+            &[tun_interface.name(), "inet6", &format!("{}/64", ula)],
+        );
+
+        cmd("ifconfig", "ifconfig", &[tun_interface.name(), "up"]);
+    }
+    }   
+
+        cmd("ifconfig", "ifconfig", &[tun_interface.name(), "mtu", "1280"]);
+        let iface = Arc::new(tun_interface);
+        let iface_writer = iface.clone();
+        let iface_reader = iface.clone();
+
+        #[cfg(target_os = "linux")]
+        let skip = 0usize;
+        #[cfg(target_os = "macos")]
+        let skip = 4usize;
         thread::spawn(move || {
             let mut buf = vec![0u8; 2048];
             loop {
@@ -141,7 +168,7 @@ impl TunDevice {
                     Ok(size) => {
                         log::info!("tun received {} bytes", size);
                         if size > 0 {
-                            match infer_proto(&buf) {
+                            match infer_proto(&buf[skip..]) {
                                 PacketProtocol::IPv4 => {
                                     log::warn!("Protocol IPV4 not implemented yet");
                                 }
@@ -154,7 +181,7 @@ impl TunDevice {
                                         
                                         match self.listener.send(TunMessage::new(
                                             self.short_addr,
-                                            TunPayload::Data(buf[..size].to_vec()),
+                                            TunPayload::Data(buf[skip..size].to_vec()),
                                         )) {
                                             Ok(_) => {}
                                             Err(e) => {
@@ -174,7 +201,7 @@ impl TunDevice {
                     }
                     Err(e) => log::warn!("failed to read data from TUN : {}", e),
                 }
-                sleep(Duration::from_millis(10));
+                // sleep(Duration::from_millis(10));
             }
         });
 
@@ -276,10 +303,31 @@ impl NetworkManager {
         (traffic_class >> 2, traffic_class & 0b0000_0011)
     }
 
+    fn get_extended_address_from_short_addr(short_addr: u16) -> [u8; 8] {
+        let mut v = [
+            0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x0, 0x0,
+        ];
+        let b = short_addr.to_be_bytes();
+        v[6] = b[0];
+        v[7] = b[1];
+        v
+    } 
     fn ipv6_to_tun_payload_and_short_addr(buf: &Vec<u8>) -> Option<(TunPayload, u16)> {
         let mut ipv6_pkt = Ipv6Packet::new(buf)?;
         let (_, short_addr) = Self::pan_id_and_short_addr_from_ipv6(&ipv6_pkt.get_destination());
-        Some((TunPayload::Data(buf.to_vec()), short_addr))
+        cfg_if::cfg_if! {
+            if #[cfg(target_os = "linux")] {
+                return Some((TunPayload::Data(buf.to_vec()), short_addr));
+            } else if #[cfg(target_os = "macos")] {
+                let mut v = Vec::<u8>::with_capacity(buf.len() + 4);
+                v.write_u16::<NativeEndian>(0).unwrap();
+                v.write_u16::<NetworkEndian>(libc::PF_INET6 as u16).unwrap();
+                v.extend_from_slice(buf);
+        
+               return Some((TunPayload::Data(v), short_addr));
+            }
+        }
+        None
     }
     pub fn ipv6_from_ipv4(pan_id: u16, buf: &Vec<u8>) -> Option<Vec<u8>> {
         let ipv4_pkt = Ipv4Packet::new(buf)?;
@@ -413,6 +461,12 @@ impl NetworkManager {
                                         let tun_device = TunDevice::new(short_addr, tun_tx.clone());
                                         let (tx, mut rx) = flume::unbounded::<TunMessage>();
                                         self.tun_devices.insert(short_addr, tx);
+                                        //TODO
+                                        let eui64 = Self::get_extended_address_from_short_addr(short_addr).to_vec();
+                                        let msg = request::AdpMacSetRequest::new(adp::EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_EXTENDED_ADDRESS, 0, 
+                                            &eui64);
+                                            self.cmd_tx.send(usi::Message::UsiOut(msg.into()));
+                                        
                                         tun_device.start(short_addr, rx);
                                     }
                                 }
@@ -432,6 +486,14 @@ impl NetworkManager {
                                         let tun_device = TunDevice::new(short_addr, tun_tx.clone());
                                         let (tx, mut rx) = flume::unbounded::<TunMessage>();
                                         self.tun_devices.insert(short_addr, tx);
+                                        //TODO
+                                        let eui64 = Self::get_extended_address_from_short_addr(short_addr).to_vec();
+                                        let msg = request::AdpMacSetRequest::new(adp::EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_EXTENDED_ADDRESS, 0, 
+                                            &eui64);
+                                            match self.cmd_tx.send(usi::Message::UsiOut(msg.into())){
+                                                Ok(_) => log::trace!("setting extended eui64 address request sent"),
+                                                Err(e) => log::error!("setting extended eui64 address request failed {}", e),
+                                            }
 
                                         tun_device.start(short_addr, rx);
                                     }
@@ -473,7 +535,11 @@ impl NetworkManager {
                         }
                         Err(_) => {}
                     }
+
                  }
+                 else {
+                    // tun_rx.drain();
+                }
                 sleep(Duration::from_millis(10)); //TODO, spin threads and recv instead of try_recv
             }
         });

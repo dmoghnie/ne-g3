@@ -29,9 +29,14 @@ rand = "*"
 config = "*"
 serde = "*"
 serde_derive = "*"
+byteorder = "1.4.3"
 
-tun-tap = {git = "https://github.com/dmoghnie/tuntap"}
+# tun-tap = {path="../../libs/tuntap"}
 pnet_packet = "*"
+libc = "0.2"
+
+[build-dependencies]
+cc = "~1"
 
 # smoltcp = {path = "../../libs/smoltcp", default-features= true}
 
