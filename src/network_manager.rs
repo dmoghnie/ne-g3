@@ -108,10 +108,6 @@ impl TunDevice {
             0xfd00, 0x0, 0x02, *PAN_ID, 0x1122, 0x3344, 0x5566, short_addr,
         );
 
-        #[cfg(target_os = "linux")]
-        let iface = Iface::without_packet_info("tun%d", Mode::Tun).unwrap();
-
-        #[cfg(target_os = "macos")]
         let tun_interface = TunInterface::new().unwrap();
 
         cfg_if::cfg_if! {

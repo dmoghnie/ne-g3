@@ -4,7 +4,7 @@ use std::{io::{self, Read, Write}, sync::Arc, fs::File, os::unix::prelude::RawFd
 
 #[cfg(target_os = "linux")]
 extern "C" {
-    fn tuntap_setup(fd: c_int, name: *mut u8, mode: c_int, packet_info: c_int) -> c_int;
+    fn tuntap_setup(fd: libc::c_int, name: *mut u8, mode: libc::c_int, packet_info: libc::c_int) -> libc::c_int;
 }
 
 #[cfg(target_os = "macos")]
@@ -35,6 +35,20 @@ fn get_available_utun() -> Option<u32> {
     None
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub enum Mode {
+    /// TUN mode
+    ///
+    /// The packets returned are on the IP layer (layer 3), prefixed with 4-byte header (2 bytes
+    /// are flags, 2 bytes are the protocol inside, eg one of
+    /// <https://en.wikipedia.org/wiki/EtherType#Examples>.
+    Tun = 1,
+    /// TAP mode
+    ///
+    /// The packets are on the transport layer (layer 2), and start with ethernet frame header.
+    Tap = 2,
+}
+
 pub struct TunInterface {
     #[cfg(target_os = "macos")]
     fd: RawFd,
@@ -63,6 +77,9 @@ impl TunInterface {
 
     #[cfg(target_os = "linux")]
     pub fn new() -> Result<Self, io::Error> {
+        use std::ffi::CStr;
+        use std::io::Error;
+        use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
         use std::fs::OpenOptions;
 
         let fd = OpenOptions::new()
@@ -79,15 +96,15 @@ impl TunInterface {
             tuntap_setup(
                 fd.as_raw_fd(),
                 name_ptr,
-                mode as c_int,
-                if packet_info { 1 } else { 0 },
+                Mode::Tun as libc::c_int,
+                if false { 1 } else { 0 },
             )
         };
         if result < 0 {
             return Err(Error::last_os_error());
         }
         let name = unsafe {
-            CStr::from_ptr(name_ptr as *const c_char)
+            CStr::from_ptr(name_ptr as *const libc::c_char)
                 .to_string_lossy()
                 .into_owned()
         };
@@ -105,7 +122,7 @@ impl TunInterface {
     }
     #[cfg(target_os = "linux")]
     pub fn send(&self, buf: &[u8]) -> Result<usize, io::Error> {
-        self.fd.write(buf)
+        (&self.fd).write(buf)
     }
 
     #[cfg(target_os = "macos")]
