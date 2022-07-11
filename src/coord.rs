@@ -52,6 +52,9 @@ lazy_static! {
             adp::EMacWrpPibAttribute::MAC_WRP_PIB_PAN_ID,
             0,
             app_config::PAN_ID.to_be_bytes().to_vec()
+        ),
+        (
+            adp::EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_FORCED_MOD_TYPE, 0, vec![0x04]
         )
     ];
     static ref ADP_STACK_PARAMETERS: Vec<(adp::EAdpPibAttribute, u16, Vec<u8>)> = vec![
