@@ -205,7 +205,7 @@ impl TunDevice {
                     }
                     Err(e) => log::warn!("failed to read data from TUN : {}", e),
                 }
-                sleep(Duration::from_millis(10));
+                // sleep(Duration::from_millis(10));
             }
         });
 
@@ -539,7 +539,11 @@ impl NetworkManager {
                         }
                         Err(_) => {}
                     }
+
                  }
+                 else {
+                    tun_rx.drain();
+                }
                 sleep(Duration::from_millis(10)); //TODO, spin threads and recv instead of try_recv
             }
         });
