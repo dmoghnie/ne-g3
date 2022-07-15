@@ -1,4 +1,3 @@
-use crate::fd::Fd;
 
 use std::{io::{self, Read, Write}, sync::Arc, fs::File, os::unix::prelude::RawFd};
 

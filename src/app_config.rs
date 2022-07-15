@@ -1,6 +1,6 @@
 use std::sync::RwLock;
 
-use crate::{lbp_functions::{TEapPskKey}, adp::TAdpBand};
+use crate::{lbp_functions::{TEapPskKey}, adp::{TAdpBand, self}};
 use config::Config;
 
 
@@ -8,9 +8,7 @@ use lazy_static::lazy_static;
 use crate::network_manager::NetworkManager;
 
 
-// pub const PAN_ID: u16 = 0x781D;
-// pub const SENDER: [u8; 2] = [0x0, 0x1];
-// pub const RECEIVER: [u8; 2] = [0x0, 0x2];
+
 pub const BAND: TAdpBand = TAdpBand::ADP_BAND_FCC;
 
 // pub const CONF_PSK_KEY: [u8; 16] = [
@@ -41,6 +39,9 @@ pub const g_au8CurrGMK:[u8; 16]  = [0xAF, 0x4D, 0x6D, 0xCC, 0xF1, 0x4D, 0xE7, 0x
 pub const g_au8RekeyGMK:[u8; 16] = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16];
 
 pub const MAX_HOPS:u8 = 0x0A;
+
+pub type MacParam = (adp::EMacWrpPibAttribute, u16, Vec<u8>);
+pub type AdpParam = (adp::EAdpPibAttribute, u16, Vec<u8>);
 
 lazy_static! {
     pub static ref G_EAP_PSK_KEY: TEapPskKey = {
@@ -74,6 +75,84 @@ lazy_static! {
         s.network.tun.clone()
     };
 
+    pub static ref COORD_PARAMS: (Vec<MacParam>, Vec<AdpParam>) = {
+        let adp = vec![
+            (adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL, 0, vec![0x05]),
+    
+            (
+                adp::EAdpPibAttribute::ADP_IB_MAX_JOIN_WAIT_TIME,
+                0,
+                vec![0x00, 0x5A]
+            ),
+            (adp::EAdpPibAttribute::ADP_IB_MAX_HOPS, 0, vec![0x0A]),
+            (adp::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY, 0, CONF_PSK_KEY.to_vec()),
+            (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 0, CONF_CONTEXT_INFORMATION_TABLE_0.to_vec()),
+            // (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 1, app_config::CONF_CONTEXT_INFORMATION_TABLE_1.to_vec()),
+            (
+                adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL,
+                0,
+                vec![0x0]
+            ),
+            (
+                adp::EAdpPibAttribute::ADP_IB_ROUTING_TABLE_ENTRY_TTL,
+                0,
+                vec![0xB4, 0x00]
+            ),
+    
+    
+        ];
+        let mac = vec![
+            (
+                adp::EMacWrpPibAttribute::MAC_WRP_PIB_SHORT_ADDRESS,
+                0,
+                vec![0x0, 0x0]
+            ),
+            (
+                adp::EMacWrpPibAttribute::MAC_WRP_PIB_PAN_ID,
+                0,
+                PAN_ID.to_be_bytes().to_vec()
+            ),
+            (
+                adp::EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_FORCED_MOD_TYPE, 0, vec![0x04]
+            )
+        ];
+
+        (mac, adp)
+    };
+
+    pub static ref MODEM_PARAMS: (Vec<MacParam>, Vec<AdpParam>) = {
+        let adp = vec![
+            (adp::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY, 0, CONF_PSK_KEY.to_vec()),
+            (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 0, CONF_CONTEXT_INFORMATION_TABLE_0.to_vec()),
+            // (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 1, app_config::CONF_CONTEXT_INFORMATION_TABLE_1.to_vec()),
+            (
+                adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL,
+                0,
+                vec![0x0]
+            ),
+            (
+                adp::EAdpPibAttribute::ADP_IB_ROUTING_TABLE_ENTRY_TTL,
+                0,
+                vec![0xB4, 0x00]
+            ),
+            (
+                adp::EAdpPibAttribute::ADP_IB_MAX_JOIN_WAIT_TIME,
+                0,
+                vec![0x00, 0x0f]
+            ),
+            (
+                adp::EAdpPibAttribute::ADP_IB_MAX_HOPS,
+                0,
+                vec![0x0A],
+            )
+        ];
+        let mac = vec![
+            (
+                adp::EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_FORCED_MOD_TYPE, 0, vec![0x04]
+            ),
+            (adp::EMacWrpPibAttribute::MAC_WRP_PIB_PAN_ID, 0, PAN_ID.to_be_bytes().to_vec())];
+        (mac, adp)
+    };
 
 }
 
@@ -115,33 +194,10 @@ pub struct Network {
 
 impl Settings {
     pub fn new() -> Result<Self, ConfigError> {
-        let run_mode = env::var("RUN_MODE").unwrap_or_else(|_| "development".into());
-
         let s = Config::builder()
             // Start off by merging in the "default" configuration file
             .add_source(File::with_name("ne-g3.toml"))
-            // Add in the current environment file
-            // Default to 'development' env
-            // Note that this file is _optional_
-            .add_source(
-                File::with_name(&format!("examples/hierarchical-env/config/{}", run_mode))
-                    .required(false),
-            )
-            // Add in a local configuration file
-            // This file shouldn't be checked in to git
-            .add_source(File::with_name("examples/hierarchical-env/config/local").required(false))
-            // Add in settings from the environment (with a prefix of APP)
-            // Eg.. `APP_DEBUG=1 ./target/app` would set the `debug` key
-            .add_source(Environment::with_prefix("app"))
-            // You may also programmatically change settings
-            .set_override("database.url", "postgres://")?
             .build()?;
-
-        // // Now that we're done, let's access our configuration
-        // println!("debug: {:?}", s.get_bool("debug"));
-        // println!("database: {:?}", s.get::<String>("database.url"));
-
-        // You can deserialize (and thus freeze) the entire configuration as
         s.try_deserialize()
     }
 }

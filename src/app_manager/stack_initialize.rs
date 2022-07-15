@@ -1,0 +1,55 @@
+use crate::{app_config, usi, request::{AdpSetRequest, AdpInitializeRequest, self}, app_manager::Idle, adp};
+
+use super::{Stateful, Response, State, Message};
+
+pub struct StackInitialize {
+
+}
+
+impl StackInitialize {
+    pub fn new() -> Self {
+        
+        StackInitialize {
+            
+        }
+    }
+    
+}
+
+impl Stateful<State, usi::Message, flume::Sender<usi::Message>> for StackInitialize {
+    fn on_enter(&mut self, cs: &flume::Sender<usi::Message>) -> Response<State> {
+        log::info!("State : StackInitialize - onEnter");
+        let request = request::AdpInitializeRequest::from_band(app_config::BAND);
+        match cs.send(usi::Message::UsiOut(request.into())) {
+            Ok(_) => {
+                Response::Handled
+            },
+            Err(e) => {
+                log::warn!("Initialize Modem failed to send request : {}", e);
+                Response::Transition(State::Idle) //TODO send to failed and recovery
+            },
+        }        
+    }
+
+    fn on_event(&mut self, cs: &flume::Sender<usi::Message>, event: &Message) -> Response<State> {
+        log::trace!("StackInitialize : {:?}", event);
+        match event {
+            Message::Adp(adp) => {
+                match adp {
+                    adp::Message::AdpG3MsgStatusResponse(status_response) => {
+                       //TODO check if success
+                       Response::Transition(State::SetParams)
+                    }
+                    _ => {
+                        Response::Handled
+                    }
+                }
+            },
+            _ => {
+                Response::Handled
+            }
+        }        
+    }
+
+    fn on_exit(&mut self) {}
+}

@@ -1,3 +1,4 @@
+
 mod adp;
 mod app;
 mod app_config;
@@ -12,8 +13,8 @@ mod network_manager;
 mod ipv6_frag_manager;
 mod request;
 mod usi;
-mod fd;
 mod tun_interface;
+mod app_manager;
 
 use std::time::{Duration, SystemTime};
 use std::{env, io, str, thread};
@@ -36,12 +37,14 @@ extern crate env_logger;
 
 use log::Level;
 
+
+use crate::app_manager::AppManager;
 use crate::usi::{Message, MessageHandler, OutMessage, UsiSender};
 
 const TIMER_RESOLUTION: Duration = Duration::from_millis(20000);
 
 fn main() {
-    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+    env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
 
     let s = app_config::SETTINGS.read().unwrap();
 
@@ -73,45 +76,50 @@ fn main() {
         .expect("Failed to open port {}");
 
     let mut tx_port = port.try_clone().unwrap();
-    let (app_tx, app_rx) = flume::unbounded::<Message>();
+    // let (app_tx, app_rx) = flume::unbounded::<Message>();
     // let (usi_tx, usi_rx) = flume::unbounded::<Message>();
     // let (net_tx, net_rx) = flume::unbounded::<adp::Message>();
 
     // let request = request::AdpInitializeRequest::from_band(message::TAdpBand::ADP_BAND_CENELEC_A);
-    let sender = app_tx.clone();
+    // let sender = app_tx.clone();
+    let (app_usi_tx, app_usi_rx) = flume::unbounded::<usi::Message>();
     let mut usi = usi::Port::new(port);
-    usi.add_listener(sender);
-    let usi_tx = usi.start(tx_port);
-
-    let cmd_tx = usi_tx.clone();
+    usi.add_listener(app_usi_tx.clone());
     let (tx, rx) = flume::unbounded::<adp::Message>();
+    let usi_tx = usi.start(tx_port);
+    let app_manager = AppManager::new(usi_tx.clone(), tx, false);
+    app_manager.start(app_usi_rx);
+
+   
     
     let network_manager = network_manager::NetworkManager::new(s.g3.pan_id, usi_tx);
 
     network_manager.start(rx);
     log::info!("Network Manager started ...");
     
-    let t2 = thread::spawn(move || {
-        let message_handler: Option<Box<dyn MessageHandler>>;
-        if is_coordinator {
-            message_handler = Some(Box::new(coord::Coordinator::new(cmd_tx, tx)));
-        } else {
-            message_handler = Some(Box::new(modem::Modem::new(cmd_tx, tx)));
-        }
-        if let Some(mut handler) = message_handler {
-            loop {
-                match app_rx.recv() {
-                    Ok(msg) => {
-                        if !handler.process(msg) {
-                            break;
-                        }
-                    }
-                    Err(e) => {}
-                }
-            }
-        }
-    });
-    let system_tx = app_tx.clone();
+    
+
+    // let t2 = thread::spawn(move || {
+    //     let message_handler: Option<Box<dyn MessageHandler>>;
+    //     if is_coordinator {
+    //         message_handler = Some(Box::new(coord::Coordinator::new(cmd_tx, tx)));
+    //     } else {
+    //         message_handler = Some(Box::new(modem::Modem::new(cmd_tx, tx)));
+    //     }
+    //     if let Some(mut handler) = message_handler {
+    //         loop {
+    //             match app_rx.recv() {
+    //                 Ok(msg) => {
+    //                     if !handler.process(msg) {
+    //                         break;
+    //                     }
+    //                 }
+    //                 Err(e) => {}
+    //             }
+    //         }
+    //     }
+    // });
+    let system_tx = app_usi_tx.clone();
     let result = system_tx.send(Message::SystemStartup);
     log::info!("Sending system startup message result : {:?}", result);
     let system_handle = thread::spawn(move || loop {

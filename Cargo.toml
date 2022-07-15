@@ -34,6 +34,7 @@ byteorder = "1.4.3"
 # tun-tap = {path="../../libs/tuntap"}
 pnet_packet = "*"
 libc = "0.2"
+# stateful = {git="https://github.com/mdeloof/stateful.git"}
 
 [build-dependencies]
 cc = "~1"
