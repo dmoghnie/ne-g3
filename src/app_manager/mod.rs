@@ -13,7 +13,7 @@ use flume;
 use flume::SendError;
 
 use crate::adp;
-use crate::adp::usi_message_to_message;
+
 use crate::app;
 use crate::app_config;
 use crate::app_manager::ready::Ready;
@@ -23,30 +23,34 @@ use crate::request::AdpMacSetRequest;
 use crate::request::AdpSetRequest;
 use crate::usi;
 
+use self::join_network::JoinNetwork;
+
 mod stack_initialize;
 mod ready;
 mod set_params;
+mod join_network;
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
 pub enum State {
     Idle,
     StackInitialize,
     SetParams,
+    JoinNetwork,
     Ready,
 }
 #[derive(Debug)]
-enum Message {
-    Adp(adp::Message),
+pub enum Message<'a> {
+    Adp(&'a adp::Message),
     HeartBeat(SystemTime),
     Startup,
 }
 pub trait CommandSender<C> {
     fn send_cmd(&self, cmd: C) -> bool;
 }
-pub trait Stateful<S: Hash + PartialEq + Eq + Clone, C, CS: CommandSender<C>> {
-    fn on_enter(&mut self, cs: &CS) -> Response<S>;
-    fn on_event(&mut self, cs: &CS, event: &Message) -> Response<S>;
-    fn on_exit(&mut self);
+pub trait Stateful<S: Hash + PartialEq + Eq + Clone, C, CS: CommandSender<C>, CTX> {
+    fn on_enter(&mut self, cs: &CS, context: &mut CTX) -> Response<S>;
+    fn on_event(&mut self, cs: &CS, event: &Message, context: &mut CTX) -> Response<S>;
+    fn on_exit(&mut self, context: &mut CTX);
 }
 
 pub enum Response<S> {
@@ -82,24 +86,26 @@ pub enum Error<S> {
 //     }
 // }
 
-pub struct StateMachine<S: Hash + PartialEq + Eq + Clone, C, CS: CommandSender<C>> {
-    states: HashMap<S, Box<dyn Stateful<S, C, CS>>>,
+pub struct StateMachine<S: Hash + PartialEq + Eq + Clone, C, CS: CommandSender<C>, CTX> {
+    states: HashMap<S, Box<dyn Stateful<S, C, CS, CTX>>>,
     current_state: S,
     command_sender: CS,
+    context: CTX
 }
-impl<S: Hash + PartialEq + Eq + Clone, C, CS> StateMachine<S, C, CS>
+impl<S: Hash + PartialEq + Eq + Clone, C, CS, CTX> StateMachine<S, C, CS, CTX>
 where
-    CS: CommandSender<C>, S: Debug
+    CS: CommandSender<C>, S: Debug, CTX: Sized
 {
-    pub fn new(initial_state: S, command_sender: CS) -> Self {
-        let mut states = HashMap::<S, Box<dyn Stateful<S, C, CS>>>::new();
+    pub fn new(initial_state: S, command_sender: CS, context: CTX) -> Self {
+        let mut states = HashMap::<S, Box<dyn Stateful<S, C, CS, CTX>>>::new();
         Self {
             states: states,
             current_state: initial_state,
             command_sender: command_sender,
+            context: context
         }
     }
-    pub fn add_state(&mut self, s: S, state: Box<dyn Stateful<S, C, CS>>) {
+    pub fn add_state(&mut self, s: S, state: Box<dyn Stateful<S, C, CS, CTX>>) {
         self.states.insert(s, state);
     }
 
@@ -107,16 +113,16 @@ where
         let state = self.states.get_mut(&self.current_state);
 
         if let Some(st) = state {
-            match st.on_event(&self.command_sender, event) {
+            match st.on_event(&self.command_sender, event, &mut self.context) {
                 Response::Handled => {}
                 Response::Transition(s) => {
                     if s != self.current_state {
-                        st.on_exit();
+                        st.on_exit(&mut &mut self.context);
                         self.current_state = s;
                         loop {
                             log::info!("StateMachine : {:?} - {:?}", self.current_state, event);
                             if let Some(s) = self.states.get_mut(&self.current_state) {
-                                match s.on_enter(&self.command_sender) {
+                                match s.on_enter(&self.command_sender, &mut self.context) {
                                     Response::Handled => {
                                         break;
                                     }
@@ -152,12 +158,12 @@ where
 }
 
 struct Idle {}
-impl Stateful<State, usi::Message, flume::Sender<usi::Message>> for Idle {
-    fn on_enter(&mut self, cs: &flume::Sender<usi::Message>) -> Response<State> {
+impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for Idle {
+    fn on_enter(&mut self, cs: &flume::Sender<usi::Message>, context: &mut Context) -> Response<State> {
         Response::Handled
     }
 
-    fn on_event(&mut self, cs: &flume::Sender<usi::Message>, event: &Message) -> Response<State> {
+    fn on_event(&mut self, cs: &flume::Sender<usi::Message>, event: &Message, context: &mut Context) -> Response<State> {
         match event {
             Message::Adp(event) => Response::Handled,
             Message::HeartBeat(time) => Response::Handled,
@@ -165,7 +171,11 @@ impl Stateful<State, usi::Message, flume::Sender<usi::Message>> for Idle {
         }
     }
 
-    fn on_exit(&mut self) {}
+    fn on_exit(&mut self, context: &mut Context) {}
+}
+
+pub struct Context {
+    is_coordinator: bool
 }
 
 pub struct AppManager {
@@ -186,51 +196,51 @@ impl AppManager {
             is_coord,
         }
     }
-    fn send_cmd(&self, msg: usi::OutMessage) -> Result<(), SendError<usi::Message>> {
-        let result = self.usi_tx.send(usi::Message::UsiOut(msg));
-        if let Err(e) = result {
-            log::warn!("Send cmd: {}", e);
-            Err(e)
-        } else {
-            Ok(())
-        }
-    }
-    fn init_states( state_machine: &mut StateMachine::<State, usi::Message, flume::Sender<usi::Message>>) {
+    
+    fn init_states( state_machine: &mut StateMachine::<State, usi::Message, flume::Sender<usi::Message>, Context>) {
         state_machine.add_state(State::Idle, Box::new(Idle {}));
         state_machine.add_state(State::StackInitialize, Box::new(StackInitialize::new()));
         state_machine.add_state(State::SetParams, Box::new(SetParams::new()));
+        state_machine.add_state(State::JoinNetwork, Box::new(JoinNetwork::new()));
         state_machine.add_state(State::Ready, Box::new(Ready::new()));
     }
     pub fn start(self, usi_receiver: flume::Receiver<usi::Message>) {
         log::info!("App Manager started ...");
         thread::spawn(move || {
             let mut state_machine =
-                StateMachine::<State, usi::Message, flume::Sender<usi::Message>>::new(
+                StateMachine::<State, usi::Message, flume::Sender<usi::Message>, Context>::new(
                     State::Idle,
                     self.usi_tx.clone(),
+                    Context { is_coordinator: false }
                 );
             Self::init_states(&mut state_machine);
             
-            let mut msg: Option<Message> = None;
+           
             loop {
                 match usi_receiver.recv() {
                     Ok(event) => {
                         log::info!("app_manager - {:?} received msg : {:?}", state_machine.current_state, event);
                         match event {
                             usi::Message::UsiIn(usi_msg) => {
-                                msg = usi_message_to_message(&usi_msg)
-                                    .map_or(None, |v| Some(Message::Adp(v)));
+                                if let Some(adp_msg) = adp::usi_message_to_message(&usi_msg){
+                                    //TODO optimize, split event those needed by the state machine and those needed by network manager
+                                    state_machine.process_event(&Message::Adp(&adp_msg));
+                                    if let Err(e) = self.net_tx.send(adp_msg) {
+                                        log::warn!("Failed to send adp message to network manager {}", e);
+                                    }
+                                }
+                               
                             }
 
                             usi::Message::HeartBeat(time) => {
-                                msg = Some(Message::HeartBeat(time));
+                                state_machine.process_event(&Message::HeartBeat(time));
                             }
-                            usi::Message::SystemStartup => msg = Some(Message::Startup),
+                            usi::Message::SystemStartup => {
+                                state_machine.process_event(&Message::Startup);
+                            } 
                             _ => {}
                         }
-                        if let Some(app_msg) = &msg {
-                            state_machine.process_event(app_msg);
-                        }
+                        
                     }
                     Err(e) => {
                         log::warn!("app_manager : failed to receive message {}", e)

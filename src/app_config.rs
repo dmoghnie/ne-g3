@@ -43,6 +43,15 @@ pub const MAX_HOPS:u8 = 0x0A;
 pub type MacParam = (adp::EMacWrpPibAttribute, u16, Vec<u8>);
 pub type AdpParam = (adp::EAdpPibAttribute, u16, Vec<u8>);
 
+#[derive(PartialEq, Eq, Debug, Clone)]
+pub enum G3ParamType {
+    Adp,
+    Mac
+}
+
+
+pub type G3Param = (G3ParamType, u32, u16, Vec<u8>);
+
 lazy_static! {
     pub static ref G_EAP_PSK_KEY: TEapPskKey = {
         let s = SETTINGS.read().unwrap();
@@ -75,83 +84,86 @@ lazy_static! {
         s.network.tun.clone()
     };
 
-    pub static ref COORD_PARAMS: (Vec<MacParam>, Vec<AdpParam>) = {
-        let adp = vec![
-            (adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL, 0, vec![0x05]),
+    pub static ref COORD_PARAMS: Vec<G3Param> = {
+        let params = vec![
+            (G3ParamType::Adp, adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL.into(), 0, vec![0x05]),
     
             (
-                adp::EAdpPibAttribute::ADP_IB_MAX_JOIN_WAIT_TIME,
+                G3ParamType::Adp,
+                adp::EAdpPibAttribute::ADP_IB_MAX_JOIN_WAIT_TIME.into(),
                 0,
                 vec![0x00, 0x5A]
             ),
-            (adp::EAdpPibAttribute::ADP_IB_MAX_HOPS, 0, vec![0x0A]),
-            (adp::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY, 0, CONF_PSK_KEY.to_vec()),
-            (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 0, CONF_CONTEXT_INFORMATION_TABLE_0.to_vec()),
+            (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_MAX_HOPS.into(), 0, vec![0x0A]),
+            (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY.into(), 0, CONF_PSK_KEY.to_vec()),
+            (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE.into(), 0, CONF_CONTEXT_INFORMATION_TABLE_0.to_vec()),
             // (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 1, app_config::CONF_CONTEXT_INFORMATION_TABLE_1.to_vec()),
             (
-                adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL,
+                G3ParamType::Adp,
+                adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL.into(),
                 0,
                 vec![0x0]
             ),
             (
-                adp::EAdpPibAttribute::ADP_IB_ROUTING_TABLE_ENTRY_TTL,
+                G3ParamType::Adp,
+                adp::EAdpPibAttribute::ADP_IB_ROUTING_TABLE_ENTRY_TTL.into(),
                 0,
                 vec![0xB4, 0x00]
             ),
-    
-    
-        ];
-        let mac = vec![
             (
-                adp::EMacWrpPibAttribute::MAC_WRP_PIB_SHORT_ADDRESS,
+                G3ParamType::Mac,
+                adp::EMacWrpPibAttribute::MAC_WRP_PIB_SHORT_ADDRESS.into(),
                 0,
                 vec![0x0, 0x0]
             ),
             (
-                adp::EMacWrpPibAttribute::MAC_WRP_PIB_PAN_ID,
+                G3ParamType::Mac,
+                adp::EMacWrpPibAttribute::MAC_WRP_PIB_PAN_ID.into(),
                 0,
                 PAN_ID.to_be_bytes().to_vec()
             ),
-            (
-                adp::EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_FORCED_MOD_TYPE, 0, vec![0x04]
-            )
+    
         ];
 
-        (mac, adp)
+        params
     };
 
-    pub static ref MODEM_PARAMS: (Vec<MacParam>, Vec<AdpParam>) = {
-        let adp = vec![
-            (adp::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY, 0, CONF_PSK_KEY.to_vec()),
-            (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 0, CONF_CONTEXT_INFORMATION_TABLE_0.to_vec()),
+    pub static ref MODEM_PARAMS: Vec<G3Param> = {
+        let params = vec![
+            (G3ParamType::Adp, adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL.into(), 0, vec![0x05]),
+    
+            (
+                G3ParamType::Adp,
+                adp::EAdpPibAttribute::ADP_IB_MAX_JOIN_WAIT_TIME.into(),
+                0,
+                vec![0x00, 0x5A]
+            ),
+            (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_MAX_HOPS.into(), 0, vec![0x0A]),
+            (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY.into(), 0, CONF_PSK_KEY.to_vec()),
+            (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE.into(), 0, CONF_CONTEXT_INFORMATION_TABLE_0.to_vec()),
             // (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 1, app_config::CONF_CONTEXT_INFORMATION_TABLE_1.to_vec()),
             (
-                adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL,
+                G3ParamType::Adp,
+                adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL.into(),
                 0,
                 vec![0x0]
             ),
             (
-                adp::EAdpPibAttribute::ADP_IB_ROUTING_TABLE_ENTRY_TTL,
+                G3ParamType::Adp,
+                adp::EAdpPibAttribute::ADP_IB_ROUTING_TABLE_ENTRY_TTL.into(),
                 0,
                 vec![0xB4, 0x00]
             ),
+            
             (
-                adp::EAdpPibAttribute::ADP_IB_MAX_JOIN_WAIT_TIME,
+                G3ParamType::Mac,
+                adp::EMacWrpPibAttribute::MAC_WRP_PIB_PAN_ID.into(),
                 0,
-                vec![0x00, 0x0f]
+                PAN_ID.to_be_bytes().to_vec()
             ),
-            (
-                adp::EAdpPibAttribute::ADP_IB_MAX_HOPS,
-                0,
-                vec![0x0A],
-            )
+    
         ];
-        let mac = vec![
-            (
-                adp::EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_FORCED_MOD_TYPE, 0, vec![0x04]
-            ),
-            (adp::EMacWrpPibAttribute::MAC_WRP_PIB_PAN_ID, 0, PAN_ID.to_be_bytes().to_vec())];
-        (mac, adp)
+        params
     };
 
 }
