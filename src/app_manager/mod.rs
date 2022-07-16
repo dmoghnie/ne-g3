@@ -17,6 +17,7 @@ use crate::adp::usi_message_to_message;
 use crate::app;
 use crate::app_config;
 use crate::app_manager::ready::Ready;
+use crate::app_manager::set_params::SetParams;
 use crate::app_manager::stack_initialize::StackInitialize;
 use crate::request::AdpMacSetRequest;
 use crate::request::AdpSetRequest;
@@ -24,6 +25,7 @@ use crate::usi;
 
 mod stack_initialize;
 mod ready;
+mod set_params;
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
 pub enum State {
@@ -193,6 +195,12 @@ impl AppManager {
             Ok(())
         }
     }
+    fn init_states( state_machine: &mut StateMachine::<State, usi::Message, flume::Sender<usi::Message>>) {
+        state_machine.add_state(State::Idle, Box::new(Idle {}));
+        state_machine.add_state(State::StackInitialize, Box::new(StackInitialize::new()));
+        state_machine.add_state(State::SetParams, Box::new(SetParams::new()));
+        state_machine.add_state(State::Ready, Box::new(Ready::new()));
+    }
     pub fn start(self, usi_receiver: flume::Receiver<usi::Message>) {
         log::info!("App Manager started ...");
         thread::spawn(move || {
@@ -201,10 +209,8 @@ impl AppManager {
                     State::Idle,
                     self.usi_tx.clone(),
                 );
-            state_machine.add_state(State::Idle, Box::new(Idle {}));
-            state_machine.add_state(State::StackInitialize, Box::new(StackInitialize::new()));
-            state_machine.add_state(State::SetParams, Box::new(SetParams::new()));
-            state_machine.add_state(State::Ready, Box::new(Ready::new()));
+            Self::init_states(&mut state_machine);
+            
             let mut msg: Option<Message> = None;
             loop {
                 match usi_receiver.recv() {
@@ -242,78 +248,4 @@ impl CommandSender<usi::Message> for flume::Sender<usi::Message> {
     }
 }
 
-struct SetParams {
-    adp_params: Vec<app_config::AdpParam>,
-    mac_params: Vec<app_config::MacParam>,
-}
 
-impl SetParams {
-    fn new() -> Self {
-        let (mac_params, adp_params) = app_config::COORD_PARAMS.clone();
-        SetParams {
-            adp_params,
-            mac_params,
-        }
-    }
-    fn set_adp_param(
-        &self,
-        cs: &flume::Sender<usi::Message>,
-        param: &app_config::AdpParam,
-    ) -> bool {
-        let request = AdpSetRequest::new(param.0, param.1, &param.2);
-        match cs.send(usi::Message::UsiOut(request.into())) {
-            Ok(_) => {
-                true
-            },
-            Err(e) => {
-                log::warn!("Failed to set adp_param : {}", e);
-                false
-            },
-        }
-    }
-    fn set_mac_param(&self, cs: &flume::Sender<usi::Message>, param: &app_config::MacParam) -> bool {
-        let request = AdpMacSetRequest::new(param.0, param.1, &param.2);
-        match cs.send(usi::Message::UsiOut(request.into())) {
-            Ok(_) => {
-                true
-            },
-            Err(e) => {
-                log::warn!("Failed to set adp_param : {}", e);
-                false
-            },
-        }
-    }
-    fn send_next_param(&mut self, cs: &flume::Sender<usi::Message>) -> bool {
-        if self.mac_params.len() > 0 {
-            if let Some(param) = self.mac_params.pop() {
-                return self.set_mac_param(cs, &param);
-            }
-        } else if self.adp_params.len() > 0 {
-            if let Some(param) = self.adp_params.pop() {
-                return self.set_adp_param(cs, &param);
-            }            
-        }
-        false
-    }
-}
-
-impl Stateful<State, usi::Message, flume::Sender<usi::Message>> for SetParams {
-    fn on_enter(&mut self, cs: &flume::Sender<usi::Message>) -> Response<State> {
-        log::info!("State : SetParams - onEnter");
-        
-        self.send_next_param(cs);
-        Response::Handled
-    }
-
-    fn on_event(&mut self, cs: &flume::Sender<usi::Message>, event: &Message) -> Response<State> {
-        log::trace!("SetParams : {:?}", event);
-        if self.send_next_param (cs) {
-            Response::Handled
-        }
-        else{
-            Response::Transition(State::Ready)
-        }
-    }
-
-    fn on_exit(&mut self) {}
-}
