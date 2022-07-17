@@ -1,4 +1,4 @@
-use crate::{usi, app_config, request};
+use crate::{usi, app_config, request, adp::{EAdpStatus, self}};
 
 use super::{State, Stateful, Context, Response, Message};
 
@@ -21,7 +21,14 @@ impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for Joi
         context: &mut Context,
     ) -> Response<State> {
         log::info!("State : JoinNetwork - onEnter : context {:?}", context);
-        
+
+        let cmd = request::AdpJoinNetworkRequest {
+            pan_id: *app_config::PAN_ID,
+            lba_address: 0,
+        };
+        if let Err(e) = cs.send(usi::Message::UsiOut(cmd.into())) {
+            log::warn!("Failed to send network join request {}", e);
+        }
         Response::Handled
     }
 
@@ -31,13 +38,18 @@ impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for Joi
         event: &Message,
         context: &mut Context,
     ) -> Response<State> {
-        log::trace!("JoinNetwork : {:?}", event);
-        let cmd = request::AdpJoinNetworkRequest {
-            pan_id: *app_config::PAN_ID,
-            lba_address: 0,
-        };
-        if let Err(e) = cs.send(usi::Message::UsiOut(cmd.into())) {
-            log::warn!("Failed to send network join request {}", e);
+        match event {
+            Message::Adp(adp) => {
+                match adp {
+                    adp::Message::AdpG3NetworkJoinResponse(response) => {
+                        if (response.status == EAdpStatus::G3_SUCCESS) {
+                            return Response::Transition(State::Idle);
+                        }
+                    }
+                    _ => {}
+                }
+            },
+            _ => {}
         }
         Response::Handled
     }

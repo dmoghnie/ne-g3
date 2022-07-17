@@ -1,4 +1,4 @@
-use crate::{usi, app_config, request};
+use crate::{usi, app_config, request, adp::{AdpG3NetworkStartResponse, self, EAdpStatus}};
 
 use super::{State, Stateful, Context, Response, Message};
 
@@ -35,7 +35,19 @@ impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for Sta
         context: &mut Context,
     ) -> Response<State> {
         log::trace!("StartNetwork : {:?}", event);
-        
+        match event {
+            Message::Adp(adp) => {
+                match adp {
+                    adp::Message::AdpG3NetworkStartResponse(response) => {
+                        if (response.status == EAdpStatus::G3_SUCCESS) {
+                            return Response::Transition(State::Idle);
+                        }
+                    }
+                    _ => {}
+                }
+            },
+            _ => {}
+        }
         Response::Handled
     }
 
