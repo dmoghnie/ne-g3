@@ -1,6 +1,6 @@
-use std::sync::RwLock;
+use std::{sync::RwLock, net::Ipv6Addr};
 
-use crate::{lbp_functions::{TEapPskKey}, adp::{TAdpBand, self}};
+use crate::{lbp_functions::{TEapPskKey}, adp::{TAdpBand, self, TExtendedAddress}};
 use config::Config;
 
 
@@ -67,9 +67,30 @@ lazy_static! {
         let s = SETTINGS.read().unwrap();
         NetworkManager::CONF_CONTEXT_INFORMATION_TABLE_0(s.g3.pan_id)
     };
-    pub static ref CONF_CONTEXT_INFORMATION_TABLE_1: [u8; 10] = {
+    // pub static ref CONF_CONTEXT_INFORMATION_TABLE_1: Vec<u8> = {
+    //     let s = SETTINGS.read().unwrap();
+    //     s.g3.ula_prefix.clone()
+    // };
+    pub static ref ULA_NET_PREFIX: [u8; 6] = {
         let s = SETTINGS.read().unwrap();
-        s.g3.host_prefix
+        s.network.ula_net_prefix
+    };
+    pub static ref ULA_NET_PREFIX_LEN: u8 = {
+        let s = SETTINGS.read().unwrap();
+        s.network.ula_net_prefix_len
+    };
+    pub static ref ULA_HOST_PREFIX: [u8; 6] = {
+        let s = SETTINGS.read().unwrap();
+        s.network.ula_host_prefix
+    };
+
+    pub static ref LOCAL_NET_PREFIX: [u8; 8] = {
+        let s = SETTINGS.read().unwrap();
+        s.network.local_net_prefix
+    };
+    pub static ref LOCAL_NET_PREFIX_LEN: u8 = {
+        let s = SETTINGS.read().unwrap();
+        s.network.local_net_prefix_len
     };
     pub static ref PAN_ID:u16 = {
         let s = SETTINGS.read().unwrap();
@@ -180,7 +201,7 @@ pub struct G3 {
     pub psk: [u8; 16],
     pub gmk: [u8; 16],
     pub ids: Vec<u8>,
-    pub host_prefix: [u8; 10]
+
 }
 
 #[derive(Debug, Deserialize)]
@@ -202,6 +223,11 @@ pub struct Settings {
 #[allow(unused)]
 pub struct Network {
     pub tun: String,
+    pub ula_net_prefix: [u8; 6],
+    pub ula_host_prefix: [u8; 6],
+    pub local_net_prefix: [u8; 8],
+    pub ula_net_prefix_len: u8,
+    pub local_net_prefix_len: u8
 }
 
 impl Settings {
@@ -212,4 +238,38 @@ impl Settings {
             .build()?;
         s.try_deserialize()
     }
+}
+
+pub fn ula_ipv6_addr_from_pan_id_short_addr(pan_id: u16, extended_addr: &TExtendedAddress) -> Option<Ipv6Addr> {
+    let mut addr = Vec::with_capacity(16);
+    addr.extend_from_slice(ULA_NET_PREFIX.as_slice());
+    addr.extend_from_slice(pan_id.to_be_bytes().as_slice());
+    // addr.extend_from_slice(ULA_HOST_PREFIX.as_slice());
+    // addr.extend_from_slice(short_addr.to_be_bytes().as_slice());
+    addr.extend_from_slice(extended_addr.into());
+    if addr.len() == 16 {
+        let mut v = [0u8; 16];
+        v.copy_from_slice(addr.as_slice());
+        Some(Ipv6Addr::from (v))
+    }
+    else{
+        None
+    }
+}
+pub fn local_ipv6_add_from_pan_id_short_addr(pan_id: u16, short_addr: u16) -> Option<Ipv6Addr> {
+    let mut addr = Vec::with_capacity(16);
+    addr.extend_from_slice(LOCAL_NET_PREFIX.as_slice());
+    addr.extend_from_slice(pan_id.to_be_bytes().as_slice());
+    // Ipv6Addr::new(0xfe80, 0x0, 0x0, 0x0, pan_id, 0x00ff, 0xfe00, short_addr)
+    addr.extend_from_slice(&[0x00, 0xff, 0xfe, 0x00]);
+    addr.extend_from_slice(short_addr.to_be_bytes().as_slice());
+
+    if addr.len() == 16 {
+        let mut v = [0u8; 16];
+        v.copy_from_slice(addr.as_slice());
+        Some(Ipv6Addr::from (v))
+    }
+    else{
+        None
+    }    
 }

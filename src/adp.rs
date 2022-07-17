@@ -168,6 +168,11 @@ impl Into<TAddress> for TExtendedAddress {
         return TAddress::Extended(self);
     }
 }
+impl <'a> Into<&'a [u8]> for &'a TExtendedAddress {
+    fn into(self) -> &'a [u8] {
+        return &self.0;
+    }
+}
 
 // #[repr(C)]
 // #[derive(Copy, Clone)]

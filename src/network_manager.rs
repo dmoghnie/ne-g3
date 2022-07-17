@@ -18,7 +18,7 @@ use pnet_packet::{
     Packet,
 };
 
-use crate::{app_config, tun_interface::TunInterface};
+use crate::{app_config, tun_interface::TunInterface, adp::TExtendedAddress};
 use std::sync::atomic::Ordering;
 use crate::ipv6_frag_manager;
 use crate::request;
@@ -97,16 +97,18 @@ impl TunDevice {
 
 
     
-    pub fn start(self, short_addr: u16, mut rx: flume::Receiver<TunMessage>) {
+    pub fn start(self, short_addr: u16, mut rx: flume::Receiver<TunMessage>, extended_addr: &Option<TExtendedAddress>) {
         use std::{thread::sleep, time::Duration, io::Read, io::Write};
 
 
         use crate::app_config::PAN_ID;
         /*fd00:0:2:781d:1122:3344:5566:1 */
-        let local_link = Ipv6Addr::new(0xfe80, 0x0, 0x0, 0x0, *PAN_ID, 0x00ff, 0xfe00, short_addr);
-        let ula = Ipv6Addr::new(
-            0xfd00, 0x0, 0x02, *PAN_ID, 0x1122, 0x3344, 0x5566, short_addr,
-        );
+        
+        let local_link = app_config::local_ipv6_add_from_pan_id_short_addr(*PAN_ID, short_addr).unwrap();
+        let mut ula: Option<Ipv6Addr> = None;
+        if let Some(extended_addr) = extended_addr {
+            ula = app_config::ula_ipv6_addr_from_pan_id_short_addr(*PAN_ID, extended_addr);
+        }
 
         let tun_interface = TunInterface::new().unwrap();
 
@@ -120,15 +122,16 @@ impl TunDevice {
                 "add",
                 "dev",
                 tun_interface.name(),
-                &format!("{}/80", local_link),
+                &format!("{}/{}", local_link, *app_config::LOCAL_NET_PREFIX_LEN),
             ],
         );
-        
+        if let Some(ula) = ula {
         cmd(
             "ip",
             "ip",
-            &["addr", "add", "dev", tun_interface.name(), &format!("{}/64", ula)],
+            &["addr", "add", "dev", tun_interface.name(), &format!("{}/{}", ula, *app_config::ULA_NET_PREFIX_LEN)],
         );
+    }
         
         cmd("ip", "ip", &["link", "set", "up", "dev", tun_interface.name()]);
     }
@@ -139,14 +142,15 @@ impl TunDevice {
         &[
             tun_interface.name(),
             "inet6",            
-            &format!("{}/80", local_link),
+            &format!("{}/{}", local_link, *app_config::LOCAL_NET_PREFIX_LEN)
         ]);
-
+        if let Some(ula) = ula {
         cmd(
             "ifconfig",
             "ifconfig",
-            &[tun_interface.name(), "inet6", &format!("{}/64", ula)],
+            &[tun_interface.name(), "inet6", &format!("{}/{}", ula, *app_config::ULA_NET_PREFIX_LEN)],
         );
+    }
 
         cmd("ifconfig", "ifconfig", &[tun_interface.name(), "up"]);
     }
@@ -420,6 +424,8 @@ impl NetworkManager {
         let (tun_tx, mut tun_rx) = flume::unbounded::<TunMessage>();
         log::info!("network manager starting ...");
 
+        let mut extended_addr :Option<TExtendedAddress> =  None;
+
         thread::spawn(move || {
             let mut buffer_available = true;
             loop {
@@ -449,6 +455,17 @@ impl NetworkManager {
                                     }
                                 }
                             }
+                            adp::Message::AdpG3GetMacResponse(response) => {
+                                if let Ok(attr) = adp::EMacWrpPibAttribute::try_from(response.attribute_id) {
+                                    match attr {
+                                        adp::EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_EXTENDED_ADDRESS => {
+                                            extended_addr = 
+                                                TExtendedAddress::try_from(response.attribute_val.as_slice()).map_or(None, |v| Some(v));
+                                        },
+                                        _ => {}
+                                    }
+                                }
+                            }
                             adp::Message::AdpG3NetworkStartResponse(network_start_response) => {
                                 if network_start_response.status == EAdpStatus::G3_SUCCESS {
                                     let short_addr = 0u16; //TODO, get the actual address from configuration
@@ -461,13 +478,9 @@ impl NetworkManager {
                                         let tun_device = TunDevice::new(short_addr, tun_tx.clone());
                                         let (tx, mut rx) = flume::unbounded::<TunMessage>();
                                         self.tun_devices.insert(short_addr, tx);
-                                        //TODO
-                                        let eui64 = Self::get_extended_address_from_short_addr(short_addr).to_vec();
-                                        let msg = request::AdpMacSetRequest::new(adp::EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_EXTENDED_ADDRESS, 0, 
-                                            &eui64);
-                                            self.cmd_tx.send(usi::Message::UsiOut(msg.into()));
+
                                         
-                                        tun_device.start(short_addr, rx);
+                                        tun_device.start(short_addr, rx, &extended_addr);
                                     }
                                 }
                                 else{
@@ -486,16 +499,8 @@ impl NetworkManager {
                                         let tun_device = TunDevice::new(short_addr, tun_tx.clone());
                                         let (tx, mut rx) = flume::unbounded::<TunMessage>();
                                         self.tun_devices.insert(short_addr, tx);
-                                        //TODO
-                                        let eui64 = Self::get_extended_address_from_short_addr(short_addr).to_vec();
-                                        let msg = request::AdpMacSetRequest::new(adp::EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_EXTENDED_ADDRESS, 0, 
-                                            &eui64);
-                                            match self.cmd_tx.send(usi::Message::UsiOut(msg.into())){
-                                                Ok(_) => log::trace!("setting extended eui64 address request sent"),
-                                                Err(e) => log::error!("setting extended eui64 address request failed {}", e),
-                                            }
 
-                                        tun_device.start(short_addr, rx);
+                                        tun_device.start(short_addr, rx, &extended_addr);
                                     }
                                 }
                             }

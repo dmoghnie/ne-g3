@@ -87,8 +87,8 @@ fn main() {
     usi.add_listener(app_usi_tx.clone());
     let (tx, rx) = flume::unbounded::<adp::Message>();
     let usi_tx = usi.start(tx_port);
-    let app_manager = AppManager::new(usi_tx.clone(), tx, false);
-    app_manager.start(app_usi_rx);
+    let app_manager = AppManager::new(usi_tx.clone(), tx);
+    app_manager.start(app_usi_rx, true);
 
    
     

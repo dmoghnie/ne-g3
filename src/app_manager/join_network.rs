@@ -20,7 +20,7 @@ impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for Joi
         cs: &flume::Sender<usi::Message>,
         context: &mut Context,
     ) -> Response<State> {
-        log::info!("State : JoinNetwork - onEnter");
+        log::info!("State : JoinNetwork - onEnter : context {:?}", context);
         
         Response::Handled
     }

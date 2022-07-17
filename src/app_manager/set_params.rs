@@ -70,7 +70,7 @@ impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for Set
         if self.send_next_param(cs) {
             Response::Handled
         } else {
-            Response::Transition(State::Ready)
+            Response::Transition(State::GetParams)
         }
     }
 

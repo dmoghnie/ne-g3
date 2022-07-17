@@ -14,28 +14,39 @@ use flume::SendError;
 
 use crate::adp;
 
+use crate::adp::TExtendedAddress;
 use crate::app;
 use crate::app_config;
 use crate::app_manager::ready::Ready;
 use crate::app_manager::set_params::SetParams;
 use crate::app_manager::stack_initialize::StackInitialize;
+use crate::lbp;
+use crate::lbp_manager;
 use crate::request::AdpMacSetRequest;
 use crate::request::AdpSetRequest;
 use crate::usi;
 
+use self::get_params::GetParams;
+use self::idle::Idle;
 use self::join_network::JoinNetwork;
+use self::start_network::StartNetwork;
 
 mod stack_initialize;
 mod ready;
 mod set_params;
 mod join_network;
+mod idle;
+mod get_params;
+mod start_network;
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
 pub enum State {
     Idle,
     StackInitialize,
     SetParams,
+    GetParams,
     JoinNetwork,
+    StartNetwork,
     Ready,
 }
 #[derive(Debug)]
@@ -157,43 +168,27 @@ where
     // }
 }
 
-struct Idle {}
-impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for Idle {
-    fn on_enter(&mut self, cs: &flume::Sender<usi::Message>, context: &mut Context) -> Response<State> {
-        Response::Handled
-    }
 
-    fn on_event(&mut self, cs: &flume::Sender<usi::Message>, event: &Message, context: &mut Context) -> Response<State> {
-        match event {
-            Message::Adp(event) => Response::Handled,
-            Message::HeartBeat(time) => Response::Handled,
-            Message::Startup => Response::Transition(State::StackInitialize),
-        }
-    }
-
-    fn on_exit(&mut self, context: &mut Context) {}
-}
-
+#[derive(Debug)]
 pub struct Context {
-    is_coordinator: bool
+    is_coordinator: bool,
+    extended_addr: Option<TExtendedAddress>
 }
 
 pub struct AppManager {
     usi_tx: flume::Sender<usi::Message>,
     net_tx: flume::Sender<adp::Message>,
-    is_coord: bool,
 }
 
 impl AppManager {
     pub fn new(
         usi_tx: flume::Sender<usi::Message>,
         net_tx: flume::Sender<adp::Message>,
-        is_coord: bool,
+        
     ) -> Self {
         AppManager {
             usi_tx,
             net_tx,
-            is_coord,
         }
     }
     
@@ -201,18 +196,21 @@ impl AppManager {
         state_machine.add_state(State::Idle, Box::new(Idle {}));
         state_machine.add_state(State::StackInitialize, Box::new(StackInitialize::new()));
         state_machine.add_state(State::SetParams, Box::new(SetParams::new()));
+        state_machine.add_state(State::GetParams, Box::new(GetParams::new()));
         state_machine.add_state(State::JoinNetwork, Box::new(JoinNetwork::new()));
+        state_machine.add_state(State::StartNetwork, Box::new(StartNetwork::new()));
         state_machine.add_state(State::Ready, Box::new(Ready::new()));
     }
-    pub fn start(self, usi_receiver: flume::Receiver<usi::Message>) {
+    pub fn start(self, usi_receiver: flume::Receiver<usi::Message>, is_coordinator: bool) {
         log::info!("App Manager started ...");
         thread::spawn(move || {
             let mut state_machine =
                 StateMachine::<State, usi::Message, flume::Sender<usi::Message>, Context>::new(
                     State::Idle,
                     self.usi_tx.clone(),
-                    Context { is_coordinator: false }
+                    Context { is_coordinator: is_coordinator, extended_addr: None }
                 );
+            let mut lbp_manager = lbp_manager::LbpManager::new();
             Self::init_states(&mut state_machine);
             
            
@@ -225,9 +223,25 @@ impl AppManager {
                                 if let Some(adp_msg) = adp::usi_message_to_message(&usi_msg){
                                     //TODO optimize, split event those needed by the state machine and those needed by network manager
                                     state_machine.process_event(&Message::Adp(&adp_msg));
-                                    if let Err(e) = self.net_tx.send(adp_msg) {
-                                        log::warn!("Failed to send adp message to network manager {}", e);
-                                    }
+                                    match adp_msg {
+                                        adp::Message::AdpG3LbpEvent(lbp_event) => {
+                                            if let Some(lbp_message) = lbp::adp_message_to_lbp_message(&lbp_event) {
+                                                log::info!("Received lbp_event {:?}", lbp_message);
+                                                if let Some(result) = lbp_manager.process_msg(&lbp_message) {
+                                                    // (result.into());
+                                                    self.usi_tx.send_cmd(usi::Message::UsiOut(result.into()));
+                                                }
+                                            }
+                                        }
+                                        adp::Message::AdpG3LbpReponse(lbp_response) => {
+                                            lbp_manager.process_response (&lbp_response);
+                                        }
+                                        _ => {
+                                            if let Err(e) = self.net_tx.send(adp_msg) {
+                                                log::warn!("Failed to send adp message to network manager {}", e);
+                                            }
+                                        }
+                                    }                                    
                                 }
                                
                             }
