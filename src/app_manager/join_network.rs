@@ -1,4 +1,4 @@
-use crate::{usi, app_config};
+use crate::{usi, app_config, request};
 
 use super::{State, Stateful, Context, Response, Message};
 
@@ -32,7 +32,13 @@ impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for Joi
         context: &mut Context,
     ) -> Response<State> {
         log::trace!("JoinNetwork : {:?}", event);
-        
+        let cmd = request::AdpJoinNetworkRequest {
+            pan_id: *app_config::PAN_ID,
+            lba_address: 0,
+        };
+        if let Err(e) = cs.send(usi::Message::UsiOut(cmd.into())) {
+            log::warn!("Failed to send network join request {}", e);
+        }
         Response::Handled
     }
 
