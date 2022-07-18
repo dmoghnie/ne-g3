@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use crate::{
     app_config::{self, G3ParamType},
     request::{AdpMacSetRequest, AdpSetRequest},
@@ -7,7 +9,7 @@ use crate::{
 use super::{Context, Message, Response, State, Stateful};
 
 pub struct SetParams {
-    params: Option<Vec<app_config::G3Param>>,
+    params: Option<VecDeque<app_config::G3Param>>,
 }
 
 impl SetParams {
@@ -35,7 +37,7 @@ impl SetParams {
         
     fn send_next_param(&mut self, cs: &flume::Sender<usi::Message>) -> bool {
         if let Some(params) = &mut self.params {
-            if let Some(param) = params.pop() {
+            if let Some(param) = params.pop_front() {
                 return self.set_param(cs, &param);
             }
         } 
@@ -51,9 +53,9 @@ impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for Set
     ) -> Response<State> {
         log::info!("State : SetParams - onEnter");
         if context.is_coordinator {
-            self.params = Some(app_config::COORD_PARAMS.to_vec());
+            self.params = Some(app_config::COORD_PARAMS.to_vec().into());
         } else {
-            self.params =  Some(app_config::MODEM_PARAMS.to_vec());
+            self.params =  Some(app_config::MODEM_PARAMS.to_vec().into());
 
         }
         self.send_next_param(cs);
