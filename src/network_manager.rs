@@ -459,8 +459,10 @@ impl NetworkManager {
                                 if let Ok(attr) = adp::EMacWrpPibAttribute::try_from(response.attribute_id) {
                                     match attr {
                                         adp::EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_EXTENDED_ADDRESS => {
+                                            let mut v = response.attribute_val.clone();
+                                            v.reverse();
                                             extended_addr = 
-                                                TExtendedAddress::try_from(response.attribute_val.as_slice()).map_or(None, |v| Some(v));
+                                                TExtendedAddress::try_from(v.as_slice()).map_or(None, |v| Some(v));
                                         },
                                         _ => {}
                                     }
