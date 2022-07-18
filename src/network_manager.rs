@@ -532,11 +532,13 @@ impl NetworkManager {
                                     log::info!("send {} bytes to G3", pkt.len());
 
                                     if let Some(ipv6) = Ipv6Packet::new (&pkt) {
+                                        log::info!("Packet {:?}", ipv6);
                                         let dst_addr = ipv6.get_destination();
-                                        if (Self::ipv6_is_unicast_link_local(&dst_addr)) {
+                                        if !Self::ipv6_is_unicast_link_local(&dst_addr) {
                                             let short_addr = Self::short_addr_from_ipv6(&dst_addr);
                                             // AdpSetRequest(ADP_IB_MANUF_IPV6_ULA_DEST_SHORT_ADDRESS, 0, sizeof(us_short_addr),(uint8_t*)&us_short_addr);
                                             let v = short_addr.to_be_bytes().to_vec();
+                                            log::info!("Setting short addr for packet destination {} : {}", dst_addr, short_addr);
                                             let request = AdpSetRequest::new(EAdpPibAttribute::ADP_IB_MANUF_IPV6_ULA_DEST_SHORT_ADDRESS, 0, &v);
                                             self.cmd_tx.send(usi::Message::UsiOut(request.into()));
                                         }
