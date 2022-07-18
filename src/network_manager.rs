@@ -18,7 +18,7 @@ use pnet_packet::{
     Packet,
 };
 
-use crate::{app_config, tun_interface::TunInterface, adp::TExtendedAddress};
+use crate::{app_config, tun_interface::TunInterface, adp::{TExtendedAddress, EAdpPibAttribute}, request::AdpSetRequest};
 use std::sync::atomic::Ordering;
 use crate::ipv6_frag_manager;
 use crate::request;
@@ -269,6 +269,9 @@ impl NetworkManager {
             tun_devices: HashMap::new(),
         }
     }
+    pub fn ipv6_is_unicast_link_local(addr: &Ipv6Addr) -> bool {
+        (addr.segments()[0] & 0xffc0) == 0xfe80
+    }
     pub fn ipv4_from_short_addr(short_addr: u16) -> Ipv4Addr {
         let s = short_addr + 1;
         let b = s.to_be_bytes();
@@ -294,6 +297,12 @@ impl NetworkManager {
         let segments = ipv6.segments();
         log::info!("---> pan_id_and_short_addr_from_ipv6 : {:?} ", segments);
         (segments[4], segments[7])
+    }
+    pub fn short_addr_from_ipv6(ipv6: &Ipv6Addr) -> u16 {
+        
+        let segments = ipv6.segments();
+        
+        ipv6.segments()[7]
     }
     pub fn dscp_ecn_to_traffic_class(dscp: u8, ecn: u8) -> u8 {
         /*
@@ -522,7 +531,17 @@ impl NetworkManager {
                                 TunPayload::Data(pkt) => {
                                     log::info!("send {} bytes to G3", pkt.len());
 
-                                    // let mut ipv6 = Ipv6Packet::new_unchecked(pkt);
+                                    if let Some(ipv6) = Ipv6Packet::new (&pkt) {
+                                        let dst_addr = ipv6.get_destination();
+                                        if (Self::ipv6_is_unicast_link_local(&dst_addr)) {
+                                            let short_addr = Self::short_addr_from_ipv6(&dst_addr);
+                                            // AdpSetRequest(ADP_IB_MANUF_IPV6_ULA_DEST_SHORT_ADDRESS, 0, sizeof(us_short_addr),(uint8_t*)&us_short_addr);
+                                            let v = short_addr.to_be_bytes().to_vec();
+                                            let request = AdpSetRequest::new(EAdpPibAttribute::ADP_IB_MANUF_IPV6_ULA_DEST_SHORT_ADDRESS, 0, &v);
+                                            self.cmd_tx.send(usi::Message::UsiOut(request.into()));
+                                        }
+                                    }
+                                    
                                     // ipv6.set_src_addr(Self::ipv6_from_short_addr(*app_config::PAN_ID, msg.short_addr).into());
                                     // log::info!("ipv6 pkt : {:?}", ipv6);
                                     let data_request = AdpDataRequest::new(
