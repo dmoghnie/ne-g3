@@ -106,9 +106,9 @@ impl TunDevice {
         
         let local_link = app_config::local_ipv6_add_from_pan_id_short_addr(*PAN_ID, short_addr).unwrap();
         let mut ula: Option<Ipv6Addr> = None;
-        if let Some(extended_addr) = extended_addr {
-            ula = app_config::ula_ipv6_addr_from_pan_id_short_addr(*PAN_ID, extended_addr);
-        }
+        // if let Some(extended_addr) = extended_addr {
+        //     ula = app_config::ula_ipv6_addr_from_pan_id_short_addr(*PAN_ID, extended_addr);
+        // }
 
         let tun_interface = TunInterface::new().unwrap();
 
