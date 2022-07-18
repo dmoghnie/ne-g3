@@ -41,8 +41,10 @@ impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for Get
                             if let Ok(attr) = EMacWrpPibAttribute::try_from(mac_get_response.attribute_id) {
                                 match attr {
                                     EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_EXTENDED_ADDRESS => {
+                                       let mut v = mac_get_response.attribute_val.clone();
+                                       v.reverse();
                                         context.extended_addr = 
-                                            TExtendedAddress::try_from(mac_get_response.attribute_val.as_slice()).map_or(None, |v| Some(v));
+                                            TExtendedAddress::try_from(v.as_slice()).map_or(None, |v| Some(v));
                                     },
                                     _ => {}
                                 }
