@@ -259,10 +259,10 @@ pub fn ula_ipv6_addr_from_pan_id_short_addr(pan_id: u16, extended_addr: &TExtend
 pub fn local_ipv6_add_from_pan_id_short_addr(pan_id: u16, short_addr: u16) -> Option<Ipv6Addr> {
     let mut addr = Vec::with_capacity(16);
     addr.extend_from_slice(LOCAL_NET_PREFIX.as_slice());
-    addr.extend_from_slice(pan_id.to_be_bytes().as_slice());
+    addr.extend_from_slice(pan_id.to_ne_bytes().as_slice());
     // Ipv6Addr::new(0xfe80, 0x0, 0x0, 0x0, pan_id, 0x00ff, 0xfe00, short_addr)
     addr.extend_from_slice(&[0x00, 0xff, 0xfe, 0x00]);
-    addr.extend_from_slice(short_addr.to_be_bytes().as_slice());
+    addr.extend_from_slice(short_addr.to_ne_bytes().as_slice());
 
     if addr.len() == 16 {
         let mut v = [0u8; 16];
