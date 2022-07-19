@@ -173,7 +173,7 @@ where
 pub struct Context {
     is_coordinator: bool,
     extended_addr: Option<TExtendedAddress>,
-    lbp_manager: lbp_manager::LbpManager
+   
 }
 
 pub struct AppManager {
@@ -209,7 +209,7 @@ impl AppManager {
                 StateMachine::<State, usi::Message, flume::Sender<usi::Message>, Context>::new(
                     State::Idle,
                     self.usi_tx.clone(),
-                    Context { is_coordinator: is_coordinator, extended_addr: None, lbp_manager: lbp_manager::LbpManager::new() }
+                    Context { is_coordinator: is_coordinator, extended_addr: None }
                 );
             // let mut lbp_manager = lbp_manager::LbpManager::new();
             Self::init_states(&mut state_machine);
@@ -224,9 +224,10 @@ impl AppManager {
                                 if let Some(adp_msg) = adp::usi_message_to_message(&usi_msg){
                                     //TODO optimize, split event those needed by the state machine and those needed by network manager
                                     state_machine.process_event(&Message::Adp(&adp_msg));
-                                   
-                                }
-                               
+                                    if let Err(e) = self.net_tx.send(adp_msg) {
+                                        log::warn!("Failed to send adp message to network manager {}", e);
+                                    }
+                                }                               
                             }
 
                             usi::Message::HeartBeat(time) => {
