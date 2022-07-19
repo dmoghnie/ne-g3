@@ -28,8 +28,8 @@ pub const RAND_S_DEFAULT: [u8; 16] = [0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x
 // pub const CONF_CONTEXT_INFORMATION_TABLE_0: [u8; 14] = [
 //     0x2, 0x0, 0x1, 0x50, 0xfe, 0x80, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x78, 0x1d,
 // ];
-// pub const CONF_CONTEXT_INFORMATION_TABLE_1: [u8; 10] =
-//     [0x2, 0x0, 0x1, 0x30, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66];
+pub const CONF_CONTEXT_INFORMATION_TABLE_1: [u8; 10] =
+    [0x2, 0x0, 0x1, 0x30, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66];
 
 pub const X_IDS_ARIB: [u8; 34] = [0x53, 0x4D, 0xAD, 0xB2, 0xC4, 0xD5, 0xE6, 0xFA, 0x53, 0x4D, 0xAD, 0xB2, 0xC4, 0xD5, 0xE6, 0xFA,
 0x53, 0x4D, 0xAD, 0xB2, 0xC4, 0xD5, 0xE6, 0xFA, 0x53, 0x4D, 0xAD, 0xB2, 0xC4, 0xD5, 0xE6, 0xFA,
@@ -130,7 +130,7 @@ lazy_static! {
             (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_MAX_HOPS.into(), 0, vec![0x0A]),
             (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY.into(), 0, CONF_PSK_KEY.to_vec()),
             (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE.into(), 0, CONF_CONTEXT_INFORMATION_TABLE_0.to_vec()),
-            // (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 1, app_config::CONF_CONTEXT_INFORMATION_TABLE_1.to_vec()),
+            (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE.into(), 1, CONF_CONTEXT_INFORMATION_TABLE_1.to_vec()),
             (
                 G3ParamType::Adp,
                 adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL.into(),
@@ -175,7 +175,7 @@ lazy_static! {
             (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_MAX_HOPS.into(), 0, vec![0x0A]),
             (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY.into(), 0, CONF_PSK_KEY.to_vec()),
             (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE.into(), 0, CONF_CONTEXT_INFORMATION_TABLE_0.to_vec()),
-            // (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 1, app_config::CONF_CONTEXT_INFORMATION_TABLE_1.to_vec()),
+            (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE.into(), 1, CONF_CONTEXT_INFORMATION_TABLE_1.to_vec()),
             (
                 G3ParamType::Adp,
                 adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL.into(),
@@ -248,13 +248,27 @@ impl Settings {
     }
 }
 
-pub fn ula_ipv6_addr_from_pan_id_short_addr(pan_id: u16, extended_addr: &TExtendedAddress) -> Option<Ipv6Addr> {
+pub fn ula_ipv6_addr_from_pan_id_extended_addr(pan_id: u16, extended_addr: &TExtendedAddress) -> Option<Ipv6Addr> {
     let mut addr = Vec::with_capacity(16);
     addr.extend_from_slice(ULA_NET_PREFIX.as_slice());
     addr.extend_from_slice(pan_id.to_be_bytes().as_slice());
-    // addr.extend_from_slice(ULA_HOST_PREFIX.as_slice());
-    // addr.extend_from_slice(short_addr.to_be_bytes().as_slice());
     addr.extend_from_slice(extended_addr.into());
+    if addr.len() == 16 {
+        let mut v = [0u8; 16];
+        v.copy_from_slice(addr.as_slice());
+        Some(Ipv6Addr::from (v))
+    }
+    else{
+        None
+    }
+}
+pub fn ula_ipv6_addr_from_pan_id_short_addr(pan_id: u16, short_addr: u16) -> Option<Ipv6Addr> {
+    let mut addr = Vec::with_capacity(16);
+    addr.extend_from_slice(ULA_NET_PREFIX.as_slice());
+    addr.extend_from_slice(pan_id.to_be_bytes().as_slice());
+    addr.extend_from_slice(ULA_HOST_PREFIX.as_slice());
+    addr.extend_from_slice(short_addr.to_be_bytes().as_slice());
+
     if addr.len() == 16 {
         let mut v = [0u8; 16];
         v.copy_from_slice(addr.as_slice());

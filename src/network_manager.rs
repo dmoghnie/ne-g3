@@ -18,7 +18,7 @@ use pnet_packet::{
     Packet,
 };
 
-use crate::{app_config, tun_interface::TunInterface, adp::{TExtendedAddress, EAdpPibAttribute}, request::AdpSetRequest};
+use crate::{app_config, tun_interface::TunInterface, adp::{TExtendedAddress, EAdpPibAttribute}, request::AdpSetRequest, lbp_manager, lbp};
 use std::sync::atomic::Ordering;
 use crate::ipv6_frag_manager;
 use crate::request;
@@ -107,7 +107,7 @@ impl TunDevice {
         let local_link = app_config::local_ipv6_add_from_pan_id_short_addr(*PAN_ID, short_addr).unwrap();
         let mut ula: Option<Ipv6Addr> = None;
         if let Some(extended_addr) = extended_addr {
-            ula = app_config::ula_ipv6_addr_from_pan_id_short_addr(*PAN_ID, extended_addr);
+            ula = app_config::ula_ipv6_addr_from_pan_id_short_addr(*PAN_ID, short_addr);
         }
 
         let tun_interface = TunInterface::new().unwrap();
@@ -437,6 +437,7 @@ impl NetworkManager {
 
         thread::spawn(move || {
             let mut buffer_available = true;
+            let mut lbp_manager = lbp_manager::LbpManager::new();
             loop {
                 match rx.try_recv() {
                     Ok(msg) => {
@@ -519,6 +520,17 @@ impl NetworkManager {
                                 log::info!("Received buffer ready : {}", event.buffer_ready);
                                 buffer_available = event.buffer_ready;
                             }
+                            adp::Message::AdpG3LbpEvent(lbp_event) => {
+                                if let Some(lbp_message) = lbp::adp_message_to_lbp_message(&lbp_event) {
+                                    log::info!("Received lbp_event {:?}", lbp_message);
+                                    if let Some(result) = lbp_manager.process_msg(&lbp_message) {
+                                        self.cmd_tx.send(usi::Message::UsiOut(result.into()));
+                                    }
+                                }
+                            }
+                            adp::Message::AdpG3LbpReponse(lbp_response) => {
+                                lbp_manager.process_response (&lbp_response);
+                            }
                             _ => {}
                         }
                     }
@@ -529,30 +541,36 @@ impl NetworkManager {
                         Ok(msg) => {
                             match msg.payload {
                                 TunPayload::Data(pkt) => {
-                                    log::info!("send {} bytes to G3", pkt.len());
+                                    // log::info!("send {} bytes to G3", pkt.len());
 
-                                    if let Some(ipv6) = Ipv6Packet::new (&pkt) {
-                                        log::info!("Packet {:?}", ipv6);
-                                        let dst_addr = ipv6.get_destination();
-                                        if !Self::ipv6_is_unicast_link_local(&dst_addr) {
-                                            let short_addr = Self::short_addr_from_ipv6(&dst_addr);
-                                            // AdpSetRequest(ADP_IB_MANUF_IPV6_ULA_DEST_SHORT_ADDRESS, 0, sizeof(us_short_addr),(uint8_t*)&us_short_addr);
-                                            let v = short_addr.to_be_bytes().to_vec();
-                                            log::info!("Setting short addr for packet destination {} : {}", dst_addr, short_addr);
-                                            let request = AdpSetRequest::new(EAdpPibAttribute::ADP_IB_MANUF_IPV6_ULA_DEST_SHORT_ADDRESS, 0, &v);
-                                            self.cmd_tx.send(usi::Message::UsiOut(request.into()));
-                                        }
-                                    }
+                                    // if let Some(ipv6) = Ipv6Packet::new (&pkt) {
+                                    //     log::info!("Packet {:?}", ipv6);
+                                    //     let dst_addr = ipv6.get_destination();
+                                    //     if !Self::ipv6_is_unicast_link_local(&dst_addr) {
+                                    //         // let short_addr = Self::short_addr_from_ipv6(&dst_addr);
+                                    //         let short_addr = 1u16;
+                                            
+                                    //         let v = short_addr.to_be_bytes().to_vec();
+                                    //         log::info!("Setting short addr for packet destination {} : {}", dst_addr, short_addr);
+                                    //         let request = AdpSetRequest::new(EAdpPibAttribute::ADP_IB_MANUF_IPV6_ULA_DEST_SHORT_ADDRESS, 0, &v);
+                                    //         self.cmd_tx.send(usi::Message::UsiOut(request.into()));
+                                    //         sleep(Duration::from_secs(1));
+                                    //     }
+                                    // }
                                     
                                     // ipv6.set_src_addr(Self::ipv6_from_short_addr(*app_config::PAN_ID, msg.short_addr).into());
-                                    // log::info!("ipv6 pkt : {:?}", ipv6);
+                                     log::info!("ipv6 pkt : {:?}", pkt);
                                     let data_request = AdpDataRequest::new(
                                         rand::thread_rng().gen(),
                                         &pkt,
                                         true,
                                         0,
                                     );
-                                    self.cmd_tx.send(usi::Message::UsiOut(data_request.into()));
+                                    
+                                    match self.cmd_tx.send(usi::Message::UsiOut(data_request.into())) {
+                                        Ok(_) => {log::info!("Send to usi ")},
+                                        Err(e) => {log::warn!("Failed to send to usi {}", e)},
+                                    }
                                 }
                                 TunPayload::Stop => { //Should we use this as a notification that the device is stopped or should we have a separate message
                                 }

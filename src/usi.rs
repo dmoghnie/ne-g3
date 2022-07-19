@@ -413,8 +413,8 @@ where
                         Message::UsiOut(cmd) => {
                             // self.send(&cmd);
                             if let Some(buf) = cmd.to_usi() {
-                                // log::trace!("--> {}", common::to_hex_string(&buf));
-                                log::trace!("Writing {} bytes to usi", buf.len());
+                                log::info!("--> {}", common::to_hex_string(&buf));
+                                log::info!("Writing {} bytes to usi", buf.len());
                                 match sender.write_all(&buf) {
                                     Ok(()) => {},
                                     Err(ref e) => {

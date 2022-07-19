@@ -87,6 +87,7 @@ impl DeviceSlot {
 
 type DeviceSlotRef = Rc<RefCell<DeviceSlot>>;
 
+#[derive(Debug)]
 struct DeviceManager {
     devices: HashMap<TExtendedAddress, DeviceSlotRef>,
     short_addresses: HashMap<u16, DeviceSlotRef>,
@@ -145,6 +146,7 @@ impl DeviceManager {
     }
 }
 
+#[derive(Debug)]
 pub struct LbpManager {
     u8_eap_identifier: u8,
     ext_addr: [u8; 8],

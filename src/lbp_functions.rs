@@ -73,6 +73,7 @@ pub const NETWORK_ACCESS_IDENTIFIER_SIZE_P_CENELEC_FCC: usize = 8;
 
 pub struct TEapPskNetworkAccessIdentifierP(pub Vec<u8>);
 
+#[derive(Debug)]
 pub struct TEapPskNetworkAccessIdentifierS(pub Vec<u8>);
 
 /**********************************************************************************************************************/

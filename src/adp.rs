@@ -115,7 +115,7 @@ pub const ADP_ADDRESS_16BITS: usize = 2;
 pub const ADP_ADDRESS_64BITS: usize = 8usize;
 
 #[repr(C, packed)]
-struct ipv6_prefix {
+pub struct ipv6_prefix {
     pub uc_prefix_len: u8,
 	pub uc_on_link_flag: u8,
 	pub uc_auto_config_flag: u8,
