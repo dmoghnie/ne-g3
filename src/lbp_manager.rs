@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use std::net::IpAddr;
+use std::net::Ipv6Addr;
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -617,4 +618,15 @@ impl LbpManager {
     //         }
     //     }
     // }
+
+    pub fn get_short_addr_from_ipv6_addr (&self, ipv6_addr: Ipv6Addr) -> Option<u16> {
+        if let Ok(extended_addr) = ipv6_addr.try_into() {
+            self.device_manager.get_device_by_addr(&extended_addr).map_or(None, |ds| {
+                Some(ds.deref().borrow().us_assigned_short_address)
+            })
+        }
+        else{
+            None
+        }
+    }
 }

@@ -173,6 +173,12 @@ impl <'a> Into<&'a [u8]> for &'a TExtendedAddress {
         return &self.0;
     }
 }
+impl TryFrom<Ipv6Addr> for TExtendedAddress {
+    type Error = ();
+    fn try_from(ipv6_addr: Ipv6Addr) -> Result<Self, Self::Error> {
+        ipv6_addr.octets()[8..].try_into()
+    }
+}
 
 // #[repr(C)]
 // #[derive(Copy, Clone)]
