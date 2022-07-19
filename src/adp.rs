@@ -585,6 +585,7 @@ pub fn usi_message_to_message(msg: &InMessage) -> Option<Message> {
                 _ => return None,
             }
         }
+        log::warn!("Failed to parse message : {:?}", msg);
         None
     }
 }

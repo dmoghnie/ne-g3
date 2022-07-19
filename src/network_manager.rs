@@ -553,7 +553,7 @@ impl NetworkManager {
                                                 log::info!("Setting short addr for packet destination {} : {}", dst_addr, short_addr);
                                                 let request = AdpSetRequest::new(EAdpPibAttribute::ADP_IB_MANUF_IPV6_ULA_DEST_SHORT_ADDRESS, 0, &v);
                                                 self.cmd_tx.send(usi::Message::UsiOut(request.into()));
-                                                sleep(Duration::from_secs(1));
+                                                // sleep(Duration::from_secs(2));
                                             }                                            
                                         }
                                     }

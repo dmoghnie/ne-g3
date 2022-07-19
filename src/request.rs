@@ -176,7 +176,7 @@ impl Into<usi::OutMessage> for AdpSetRequest<'_>{
         // for ch in self.attribute_value {
         //     v.push(ch);
         // }
-        v.append(self.attribute_value.clone().borrow_mut());
+        v.extend_from_slice(self.attribute_value);
         // let mut v = vec![adp::G3_SERIAL_MSG_ADP_SET_REQUEST];
         // for ch in attribute.to_le_bytes() {
         //     v.push(ch);
@@ -246,7 +246,7 @@ impl Into<usi::OutMessage> for AdpMacSetRequest<'_>{
         // for ch in self.attribute_value {
         //     v.push(ch);
         // }
-        v.append(self.attribute_value.clone().borrow_mut());
+        v.extend_from_slice(self.attribute_value);
         OutMessage::new(common::PROTOCOL_ADP_G3, &v.to_vec())
     }
 }
