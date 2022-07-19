@@ -172,7 +172,8 @@ where
 #[derive(Debug)]
 pub struct Context {
     is_coordinator: bool,
-    extended_addr: Option<TExtendedAddress>
+    extended_addr: Option<TExtendedAddress>,
+    lbp_manager: lbp_manager::LbpManager
 }
 
 pub struct AppManager {
@@ -208,9 +209,9 @@ impl AppManager {
                 StateMachine::<State, usi::Message, flume::Sender<usi::Message>, Context>::new(
                     State::Idle,
                     self.usi_tx.clone(),
-                    Context { is_coordinator: is_coordinator, extended_addr: None }
+                    Context { is_coordinator: is_coordinator, extended_addr: None, lbp_manager: lbp_manager::LbpManager::new() }
                 );
-            let mut lbp_manager = lbp_manager::LbpManager::new();
+            // let mut lbp_manager = lbp_manager::LbpManager::new();
             Self::init_states(&mut state_machine);
             
            
@@ -223,25 +224,7 @@ impl AppManager {
                                 if let Some(adp_msg) = adp::usi_message_to_message(&usi_msg){
                                     //TODO optimize, split event those needed by the state machine and those needed by network manager
                                     state_machine.process_event(&Message::Adp(&adp_msg));
-                                    match adp_msg {
-                                        adp::Message::AdpG3LbpEvent(lbp_event) => {
-                                            if let Some(lbp_message) = lbp::adp_message_to_lbp_message(&lbp_event) {
-                                                log::info!("Received lbp_event {:?}", lbp_message);
-                                                if let Some(result) = lbp_manager.process_msg(&lbp_message) {
-                                                    // (result.into());
-                                                    self.usi_tx.send_cmd(usi::Message::UsiOut(result.into()));
-                                                }
-                                            }
-                                        }
-                                        adp::Message::AdpG3LbpReponse(lbp_response) => {
-                                            lbp_manager.process_response (&lbp_response);
-                                        }
-                                        _ => {
-                                            if let Err(e) = self.net_tx.send(adp_msg) {
-                                                log::warn!("Failed to send adp message to network manager {}", e);
-                                            }
-                                        }
-                                    }                                    
+                                   
                                 }
                                
                             }

@@ -59,7 +59,7 @@ fn main() {
         network_manager::NetworkManager::ipv6_from_short_addr(s.g3.pan_id, 5)
     );
     // dbg!(config::APP_CONFIG);
-
+9
     info!("Starting ...");
     let mut args = env::args();
     let tty_path = args.nth(1).unwrap_or_else(|| DEFAULT_TTY.into());
