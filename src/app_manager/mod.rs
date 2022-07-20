@@ -227,7 +227,8 @@ impl AppManager {
                                     if let Err(e) = self.net_tx.send(adp_msg) {
                                         log::warn!("Failed to send adp message to network manager {}", e);
                                     }
-                                }                               
+                                }
+                               
                             }
 
                             usi::Message::HeartBeat(time) => {
