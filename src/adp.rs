@@ -1017,9 +1017,9 @@ impl AdpG3SetMacResponse {
 
 const SET_RESPONSE_LEN: usize = 7;
 pub struct AdpG3SetResponse {
-    status: EAdpStatus,
-    attribute_id: u32,
-    attribute_idx: u16,
+    pub status: EAdpStatus,
+    pub attribute_id: u32,
+    pub attribute_idx: u16,
 }
 
 impl AdpG3SetResponse {

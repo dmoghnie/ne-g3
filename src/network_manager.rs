@@ -439,6 +439,9 @@ impl NetworkManager {
         thread::spawn(move || {
             let mut buffer_available = true;
             let mut lbp_manager = lbp_manager::LbpManager::new();
+            let mut current_short_dst_addr:Option<u16> = None;
+            let mut current_out_msg : Option<Vec<u8>> = None;
+
             loop {
                 match rx.try_recv() {
                     Ok(msg) => {
@@ -532,6 +535,25 @@ impl NetworkManager {
                             adp::Message::AdpG3LbpReponse(lbp_response) => {
                                 lbp_manager.process_response (&lbp_response);
                             }
+                            adp::Message::AdpG3SetResponse(resp) => {
+                                if let Ok(attr) = EAdpPibAttribute::try_from(resp.attribute_id) {
+                                    if attr == EAdpPibAttribute::ADP_IB_MANUF_IPV6_ULA_DEST_SHORT_ADDRESS {
+                                        if let Some(ref pkt) = current_out_msg {
+                                            let data_request = AdpDataRequest::new(
+                                                rand::thread_rng().gen(),
+                                                &pkt,
+                                                true,
+                                                0,
+                                            );
+                                            
+                                            match self.cmd_tx.send(usi::Message::UsiOut(data_request.into())) {
+                                                Ok(_) => {log::info!("Send to usi ")},
+                                                Err(e) => {log::warn!("Failed to send to usi {}", e)},
+                                            }                                            
+                                        }
+                                    }
+                                }
+                            }
                             _ => {}
                         }
                     }
@@ -548,17 +570,17 @@ impl NetworkManager {
                                         log::info!("Packet {:?}", ipv6);
                                         let dst_addr = ipv6.get_destination();
                                         if !Self::ipv6_is_unicast_link_local(&dst_addr) {
-                                            if let Some(short_addr) = lbp_manager.get_short_addr_from_ipv6_addr(dst_addr) {
+                                            if let Some(short_addr) = lbp_manager.get_short_addr_from_ipv6_addr(dst_addr) {                                                
                                                 let v = short_addr.to_be_bytes().to_vec();
                                                 log::info!("Setting short addr for packet destination {} : {}", dst_addr, short_addr);
+                                                current_out_msg = Some(pkt);
                                                 let request = AdpSetRequest::new(EAdpPibAttribute::ADP_IB_MANUF_IPV6_ULA_DEST_SHORT_ADDRESS, 0, &v);
                                                 self.cmd_tx.send(usi::Message::UsiOut(request.into()));
                                                 // sleep(Duration::from_secs(2));
                                             }                                            
                                         }
-                                    }
-                                    
-                                    // ipv6.set_src_addr(Self::ipv6_from_short_addr(*app_config::PAN_ID, msg.short_addr).into());
+                                        else{
+// ipv6.set_src_addr(Self::ipv6_from_short_addr(*app_config::PAN_ID, msg.short_addr).into());
                                     //  log::info!("ipv6 pkt : {:?}", pkt);
                                     let data_request = AdpDataRequest::new(
                                         rand::thread_rng().gen(),
@@ -571,6 +593,10 @@ impl NetworkManager {
                                         Ok(_) => {log::info!("Send to usi ")},
                                         Err(e) => {log::warn!("Failed to send to usi {}", e)},
                                     }
+                                        }
+                                    }
+                                    
+                                    
                                 }
                                 TunPayload::Stop => { //Should we use this as a notification that the device is stopped or should we have a separate message
                                 }
