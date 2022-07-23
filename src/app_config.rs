@@ -71,7 +71,7 @@ lazy_static! {
     //     let s = SETTINGS.read().unwrap();
     //     s.g3.ula_prefix.clone()
     // };
-    pub static ref ULA_NET_PREFIX: [u8; 6] = {
+    pub static ref ULA_NET_PREFIX: [u8; 8] = {
         let s = SETTINGS.read().unwrap();
         s.network.ula_net_prefix
     };
@@ -231,7 +231,7 @@ pub struct Settings {
 #[allow(unused)]
 pub struct Network {
     pub tun: String,
-    pub ula_net_prefix: [u8; 6],
+    pub ula_net_prefix: [u8; 8],
     pub ula_host_prefix: [u8; 6],
     pub local_net_prefix: [u8; 8],
     pub ula_net_prefix_len: u8,
@@ -251,7 +251,7 @@ impl Settings {
 pub fn ula_ipv6_addr_from_pan_id_extended_addr(pan_id: u16, extended_addr: &TExtendedAddress) -> Option<Ipv6Addr> {
     let mut addr = Vec::with_capacity(16);
     addr.extend_from_slice(ULA_NET_PREFIX.as_slice());
-    addr.extend_from_slice(pan_id.to_be_bytes().as_slice());
+    // addr.extend_from_slice(pan_id.to_be_bytes().as_slice());
     addr.extend_from_slice(extended_addr.into());
     if addr.len() == 16 {
         let mut v = [0u8; 16];
@@ -265,7 +265,7 @@ pub fn ula_ipv6_addr_from_pan_id_extended_addr(pan_id: u16, extended_addr: &TExt
 pub fn ula_ipv6_addr_from_pan_id_short_addr(pan_id: u16, short_addr: u16) -> Option<Ipv6Addr> {
     let mut addr = Vec::with_capacity(16);
     addr.extend_from_slice(ULA_NET_PREFIX.as_slice());
-    addr.extend_from_slice(pan_id.to_be_bytes().as_slice());
+    // addr.extend_from_slice(pan_id.to_be_bytes().as_slice());
     addr.extend_from_slice(ULA_HOST_PREFIX.as_slice());
     addr.extend_from_slice(short_addr.to_be_bytes().as_slice());
 

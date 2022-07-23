@@ -106,10 +106,10 @@ impl TunDevice {
         
         let local_link = app_config::local_ipv6_add_from_pan_id_short_addr(*PAN_ID, short_addr).unwrap();
         let mut ula: Option<Ipv6Addr> = None;
-        if let Some(extended_addr) = extended_addr {
-            // ula = app_config::ula_ipv6_addr_from_pan_id_short_addr(*PAN_ID, short_addr);
-            ula = app_config::ula_ipv6_addr_from_pan_id_extended_addr(*PAN_ID, extended_addr);
-        }
+        ula = app_config::ula_ipv6_addr_from_pan_id_short_addr(*PAN_ID, short_addr);
+        // if let Some(extended_addr) = extended_addr {            
+        //     ula = app_config::ula_ipv6_addr_from_pan_id_extended_addr(*PAN_ID, extended_addr);
+        // }
 
         let tun_interface = TunInterface::new().unwrap();
 
@@ -571,7 +571,7 @@ impl NetworkManager {
                                         let dst_addr = ipv6.get_destination();
                                         if !Self::ipv6_is_unicast_link_local(&dst_addr) {
                                             if let Some(short_addr) = lbp_manager.get_short_addr_from_ipv6_addr(dst_addr) {                                                
-                                                let v = short_addr.to_be_bytes().to_vec();
+                                                let v = short_addr.to_le_bytes().to_vec();
                                                 log::info!("Setting short addr for packet destination {} : {}", dst_addr, short_addr);
                                                 current_out_msg = Some(pkt);
                                                 let request = AdpSetRequest::new(EAdpPibAttribute::ADP_IB_MANUF_IPV6_ULA_DEST_SHORT_ADDRESS, 0, &v);
