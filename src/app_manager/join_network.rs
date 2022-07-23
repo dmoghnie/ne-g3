@@ -1,4 +1,4 @@
-use crate::{usi, app_config, request, adp::{EAdpStatus, self}};
+use crate::{usi, app_config, request, adp::{EAdpStatus, self, EMacWrpPibAttribute}};
 
 use super::{State, Stateful, Context, Response, Message};
 
@@ -43,6 +43,9 @@ impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for Joi
                 match adp {
                     adp::Message::AdpG3NetworkJoinResponse(response) => {
                         if (response.status == EAdpStatus::G3_SUCCESS) {
+                            let v = response.network_addr.to_be_bytes().to_vec();
+                            let request = request::AdpMacSetRequest::new(EMacWrpPibAttribute::MAC_WRP_PIB_SHORT_ADDRESS, 0, &v);
+                            cs.send(usi::Message::UsiOut(request.into()));
                             return Response::Transition(State::Idle);
                         }
                     }
