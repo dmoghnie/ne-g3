@@ -125,7 +125,7 @@ lazy_static! {
                 G3ParamType::Adp,
                 adp::EAdpPibAttribute::ADP_IB_MAX_JOIN_WAIT_TIME.into(),
                 0,
-                vec![0x00, 0x5A]
+                vec![0x10, 0x00]
             ),
             (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_MAX_HOPS.into(), 0, vec![0x0A]),
             (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY.into(), 0, CONF_PSK_KEY.to_vec()),
@@ -170,7 +170,7 @@ lazy_static! {
                 G3ParamType::Adp,
                 adp::EAdpPibAttribute::ADP_IB_MAX_JOIN_WAIT_TIME.into(),
                 0,
-                vec![0x00, 0x5A]
+                vec![0x10, 0x00]
             ),
             (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_MAX_HOPS.into(), 0, vec![0x0A]),
             (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY.into(), 0, CONF_PSK_KEY.to_vec()),
