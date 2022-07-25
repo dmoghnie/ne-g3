@@ -127,7 +127,7 @@ lazy_static! {
                 0,
                 vec![0x10, 0x00]
             ),
-            (G3ParamType::Adp, adp::EAdpPibAttribute::ADP_IB_DEFAULT_COORD_ROUTE_ENABLED.into(), 0, vec![0x01]),
+            // (G3ParamType::Adp, adp::EAdpPibAttribute::ADP_IB_DEFAULT_COORD_ROUTE_ENABLED.into(), 0, vec![0x01]),
             (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_MAX_HOPS.into(), 0, vec![0x0A]),
             (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY.into(), 0, CONF_PSK_KEY.to_vec()),
             (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE.into(), 0, CONF_CONTEXT_INFORMATION_TABLE_0.to_vec()),
@@ -173,7 +173,7 @@ lazy_static! {
                 0,
                 vec![0x10, 0x00]
             ),
-            (G3ParamType::Adp, adp::EAdpPibAttribute::ADP_IB_DEFAULT_COORD_ROUTE_ENABLED.into(), 0, vec![0x01]),
+            // (G3ParamType::Adp, adp::EAdpPibAttribute::ADP_IB_DEFAULT_COORD_ROUTE_ENABLED.into(), 0, vec![0x01]),
             (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_MAX_HOPS.into(), 0, vec![0x0A]),
             (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY.into(), 0, CONF_PSK_KEY.to_vec()),
             (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE.into(), 0, CONF_CONTEXT_INFORMATION_TABLE_0.to_vec()),
