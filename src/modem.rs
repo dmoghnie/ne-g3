@@ -56,7 +56,7 @@ lazy_static! {
     (adp::EMacWrpPibAttribute::MAC_WRP_PIB_PAN_ID, 0, app_config::PAN_ID.to_be_bytes().to_vec())];
     static ref ADP_STACK_PARAMETERS: Vec<(adp::EAdpPibAttribute, u16, Vec<u8>)> = vec![
         (adp::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY, 0, app_config::CONF_PSK_KEY.to_vec()),
-        (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 0, app_config::CONF_CONTEXT_INFORMATION_TABLE_0.to_vec()),
+        // (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 0, app_config::CONF_CONTEXT_INFORMATION_TABLE_0.to_vec()),
         // (adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE, 1, app_config::CONF_CONTEXT_INFORMATION_TABLE_1.to_vec()),
         (
             adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL,

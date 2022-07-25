@@ -283,12 +283,7 @@ impl NetworkManager {
         let s = ((o[2] as u16) << 8) | (o[3] as u16);
         s - 1
     }
-    pub fn ipv6_from_short_addr(pan_id: u16, short_addr: u16) -> Ipv6Addr {
-        Ipv6Addr::new(0xfe80, 0x0, 0x0, 0x0, pan_id, 0x00ff, 0xfe00, short_addr)
-    }
-    pub fn ipv6_addr_from_ipv4_addr(pan_id: u16, ipv4: &Ipv4Addr) -> Ipv6Addr {
-        Self::ipv6_from_short_addr(pan_id, Self::short_addr_from_ipv4(ipv4))
-    }
+
     pub fn ipv4_addr_from_ipv6(ipv6_addr: Ipv6Addr) -> Ipv4Addr {
         let (pan_id, short_addr) = Self::pan_id_and_short_addr_from_ipv6(&ipv6_addr);
         Self::ipv4_from_short_addr(short_addr)
@@ -343,92 +338,8 @@ impl NetworkManager {
         }
         None
     }
-    pub fn ipv6_from_ipv4(pan_id: u16, buf: &Vec<u8>) -> Option<Vec<u8>> {
-        let ipv4_pkt = Ipv4Packet::new(buf)?;
 
-        let dst = Self::ipv6_addr_from_ipv4_addr(pan_id, &ipv4_pkt.get_destination());
-        let src = Self::ipv6_addr_from_ipv4_addr(pan_id, &ipv4_pkt.get_source());
-        let traffic_class =
-            Self::dscp_ecn_to_traffic_class(ipv4_pkt.get_dscp(), ipv4_pkt.get_ecn());
 
-        let mut bytes = vec![0xff; 1520];
-        let mut packet = MutableIpv6Packet::new(&mut bytes)?;
-        // Version, Traffic Class, and Flow Label are not
-        // byte aligned. make sure the setters and getters
-        // do not interfere with each other.
-        packet.set_version(6);
-        packet.set_traffic_class(traffic_class);
-        packet.set_flow_label(0); //TODO
-
-        packet.set_payload_length(ipv4_pkt.payload().len().try_into().unwrap());
-        packet.set_next_header(ipv4_pkt.get_next_level_protocol());
-        packet.set_hop_limit(ipv4_pkt.get_ttl());
-        packet.set_source(src);
-        packet.set_destination(dst);
-        packet.set_payload(ipv4_pkt.payload());
-
-        Some(packet.packet().to_vec())
-    }
-
-    pub fn ipv4_from_ipv6(buf: &mut Vec<u8>) -> Option<(Vec<u8>, u16, u16)> {
-        log::info!("-->ipv4_from_ipv6 : {:?}", buf);
-        let ipv6_pkt = Ipv6Packet::new(buf)?;
-        let dst = Self::ipv4_addr_from_ipv6(ipv6_pkt.get_destination());
-        let src = Self::ipv4_addr_from_ipv6(ipv6_pkt.get_source());
-        let (dscp, ecn) = Self::traffic_class_to_dscp_ecn(ipv6_pkt.get_traffic_class());
-
-        let mut bytes = vec![0xa5; 1520];
-        let mut packet = MutableIpv4Packet::new(&mut bytes)?;
-
-        packet.set_version(4);
-        packet.set_header_length(20);
-        packet.set_dscp(dscp);
-        packet.set_ecn(ecn);
-        packet.set_total_length(20 + ipv6_pkt.get_payload_length());
-        packet.set_identification(0);
-        packet.set_flags(Ipv4Flags::DontFragment);
-
-        packet.set_ttl(ipv6_pkt.get_hop_limit());
-        packet.set_next_level_protocol(ipv6_pkt.get_next_header());
-        packet.set_source(src);
-        packet.set_destination(dst);
-        // packet.fill_checksum();
-
-        let (pan_id, short_addr) =
-            Self::pan_id_and_short_addr_from_ipv6(&ipv6_pkt.get_destination());
-
-        Some((packet.packet().to_vec(), pan_id, short_addr))
-    }
-
-    pub fn CONF_CONTEXT_INFORMATION_TABLE_0(pan_id: u16) -> [u8; 14] {
-        let mut v = [
-            0x2, 0x0, 0x1, 0x50, 0xfe, 0x80, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0xff, 0xff,
-        ];
-        let b = pan_id.to_be_bytes();
-        v[12] = b[0];
-        v[13] = b[1];
-        v
-    }
-
-    // pub fn config_from_short_addr (short_addr: u16) -> Configuration {
-    //     let ipv4 = Self::ipv4_from_short_addr(short_addr);
-    //     let mut config = tun::Configuration::default();
-
-    //     config.address(&ipv4).netmask((255, 255, 0, 0)).up();
-    //     #[cfg(target_os = "linux")]
-    //     config.platform(|config| {
-    //         config.packet_information(true);
-    //     });
-    //     config
-    // }
-
-    // fn start_tun(&mut self, short_addr: u16) -> Option<(posix::Reader, posix::Writer)> {
-    //     let ipv4 = Self::ipv4_from_short_addr(short_addr);
-    //     let mut config = tun::Configuration::default();
-
-    //     config.address(&ipv4).netmask((255, 255, 0, 0)).up();
-    //     tun::create(&config).map_or(None, |v| Some(v.split()))
-    // }
 
     pub fn start(mut self, mut rx: flume::Receiver<adp::Message>) {
         let (tun_tx, mut tun_rx) = flume::unbounded::<TunMessage>();

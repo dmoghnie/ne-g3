@@ -50,15 +50,6 @@ fn main() {
 
     log::info!("Settings : {:?}", s);
 
-    log::info!(
-        "CONF_CONTEXT_INFORMATION_TABLE_0 : {:X?}",
-        network_manager::NetworkManager::CONF_CONTEXT_INFORMATION_TABLE_0(s.g3.pan_id)
-    );
-    log::info!(
-        "ipv6 from short addr {:?}",
-        network_manager::NetworkManager::ipv6_from_short_addr(s.g3.pan_id, 5)
-    );
-    // dbg!(config::APP_CONFIG);
 
     info!("Starting ...");
     let mut args = env::args();
