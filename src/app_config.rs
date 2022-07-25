@@ -25,9 +25,9 @@ pub const CONF_PSK_KEY_2: [u8; 16] = [
 pub const RAND_S_DEFAULT: [u8; 16] = [0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F];
 
 // Context information table: index 0 (Context 0 with value c_IPv6_PREFIX & x_PAN_ID (length = 80))
-// pub const CONF_CONTEXT_INFORMATION_TABLE_0: [u8; 14] = [
-//     0x2, 0x0, 0x1, 0x50, 0xfe, 0x80, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x78, 0x1d,
-// ];
+pub const CONF_CONTEXT_INFORMATION_TABLE_0: [u8; 14] = [
+    0x2, 0x0, 0x1, 0x50, 0xfe, 0x80, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x78, 0x1d,
+];
 pub const CONF_CONTEXT_INFORMATION_TABLE_1: [u8; 10] =
     [0x2, 0x0, 0x1, 0x30, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66];
 
@@ -130,7 +130,7 @@ lazy_static! {
             (G3ParamType::Adp, adp::EAdpPibAttribute::ADP_IB_DEFAULT_COORD_ROUTE_ENABLED.into(), 0, vec![0x01]),
             (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_MAX_HOPS.into(), 0, vec![0x0A]),
             (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY.into(), 0, CONF_PSK_KEY.to_vec()),
-            // (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE.into(), 0, CONF_CONTEXT_INFORMATION_TABLE_0.to_vec()),
+            (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE.into(), 0, CONF_CONTEXT_INFORMATION_TABLE_0.to_vec()),
             (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE.into(), 1, CONF_CONTEXT_INFORMATION_TABLE_1.to_vec()),
             (
                 G3ParamType::Adp,
@@ -176,7 +176,7 @@ lazy_static! {
             (G3ParamType::Adp, adp::EAdpPibAttribute::ADP_IB_DEFAULT_COORD_ROUTE_ENABLED.into(), 0, vec![0x01]),
             (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_MAX_HOPS.into(), 0, vec![0x0A]),
             (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY.into(), 0, CONF_PSK_KEY.to_vec()),
-            // (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE.into(), 0, CONF_CONTEXT_INFORMATION_TABLE_0.to_vec()),
+            (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE.into(), 0, CONF_CONTEXT_INFORMATION_TABLE_0.to_vec()),
             (G3ParamType::Adp,adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE.into(), 1, CONF_CONTEXT_INFORMATION_TABLE_1.to_vec()),
             (
                 G3ParamType::Adp,
