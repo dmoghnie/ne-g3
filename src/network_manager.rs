@@ -106,10 +106,10 @@ impl TunDevice {
         
         let local_link = app_config::local_ipv6_add_from_pan_id_short_addr(*PAN_ID, short_addr).unwrap();
         let mut ula: Option<Ipv6Addr> = None;
-        // ula = app_config::ula_ipv6_addr_from_pan_id_short_addr(*PAN_ID, short_addr);
-        if let Some(extended_addr) = extended_addr {            
-            ula = app_config::ula_ipv6_addr_from_pan_id_extended_addr(*PAN_ID, extended_addr);
-        }
+        ula = app_config::ula_ipv6_addr_from_pan_id_short_addr(*PAN_ID, short_addr);
+        // if let Some(extended_addr) = extended_addr {            
+        //     ula = app_config::ula_ipv6_addr_from_pan_id_extended_addr(*PAN_ID, extended_addr);
+        // }
 
         let tun_interface = TunInterface::new().unwrap();
 
@@ -477,25 +477,25 @@ impl NetworkManager {
                                 TunPayload::Data(pkt) => {
                                     // log::info!("send {} bytes to G3", pkt.len());
 
-                                    // if let Some(ipv6) = Ipv6Packet::new (&pkt) {
-                                    //     log::info!("Packet {:?}", ipv6);
-                                    //     let dst_addr = ipv6.get_destination();
-                                    //     if !Self::ipv6_is_unicast_link_local(&dst_addr) {
-                                    //         let short_addr = dst_addr.segments()[7];
-                                    //         // if let Some(short_addr) = lbp_manager.get_short_addr_from_ipv6_addr(dst_addr) {                                                
-                                    //         //     let v = short_addr.to_le_bytes().to_vec();
-                                    //         //     log::info!("Setting short addr for packet destination {} : {}", dst_addr, short_addr);
-                                    //         //     current_out_msg = Some(pkt);
-                                    //         //     let request = AdpSetRequest::new(EAdpPibAttribute::ADP_IB_MANUF_IPV6_ULA_DEST_SHORT_ADDRESS, 0, &v);
-                                    //         //     self.cmd_tx.send(usi::Message::UsiOut(request.into()));
-                                    //         // }               
-                                    //         let v = short_addr.to_le_bytes().to_vec();
-                                    //         log::info!("Setting short addr for packet destination {} : {} : {:?}", dst_addr, short_addr, v);
-                                    //         current_out_msg = Some(pkt);
-                                    //         let request = AdpSetRequest::new(EAdpPibAttribute::ADP_IB_MANUF_IPV6_ULA_DEST_SHORT_ADDRESS, 0, &v);
-                                    //         self.cmd_tx.send(usi::Message::UsiOut(request.into()));                             
-                                    //     }
-                                    //     else{
+                                    if let Some(ipv6) = Ipv6Packet::new (&pkt) {
+                                        log::info!("Packet {:?}", ipv6);
+                                        let dst_addr = ipv6.get_destination();
+                                        if !Self::ipv6_is_unicast_link_local(&dst_addr) {
+                                            let short_addr = dst_addr.segments()[7];
+                                            // if let Some(short_addr) = lbp_manager.get_short_addr_from_ipv6_addr(dst_addr) {                                                
+                                            //     let v = short_addr.to_le_bytes().to_vec();
+                                            //     log::info!("Setting short addr for packet destination {} : {}", dst_addr, short_addr);
+                                            //     current_out_msg = Some(pkt);
+                                            //     let request = AdpSetRequest::new(EAdpPibAttribute::ADP_IB_MANUF_IPV6_ULA_DEST_SHORT_ADDRESS, 0, &v);
+                                            //     self.cmd_tx.send(usi::Message::UsiOut(request.into()));
+                                            // }               
+                                            let v = short_addr.to_le_bytes().to_vec();
+                                            log::info!("Setting short addr for packet destination {} : {} : {:?}", dst_addr, short_addr, v);
+                                            current_out_msg = Some(pkt);
+                                            let request = AdpSetRequest::new(EAdpPibAttribute::ADP_IB_MANUF_IPV6_ULA_DEST_SHORT_ADDRESS, 0, &v);
+                                            self.cmd_tx.send(usi::Message::UsiOut(request.into()));                             
+                                        }
+                                        else{
 // ipv6.set_src_addr(Self::ipv6_from_short_addr(*app_config::PAN_ID, msg.short_addr).into());
                                     //  log::info!("ipv6 pkt : {:?}", pkt);
                                     let data_request = AdpDataRequest::new(
@@ -509,8 +509,8 @@ impl NetworkManager {
                                         Ok(_) => {log::info!("Send to usi ")},
                                         Err(e) => {log::warn!("Failed to send to usi {}", e)},
                                     }
-                                    //     }
-                                    // }
+                                        }
+                                    }
                                     
                                     
                                 }
