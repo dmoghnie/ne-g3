@@ -47,14 +47,14 @@ impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for Get
                                             TExtendedAddress::try_from(v.as_slice()).map_or(None, |v| Some(v));
                                        if let Some(ipv6_addr) = app_config::ula_ipv6_addr_from_pan_id_extended_addr(*app_config::PAN_ID, &context.extended_addr.unwrap()) {
                                         
-                                        // log::info!("Setting ipv6 network prefix");
-                                        // let v6prefix = ipv6_prefix::new(*app_config::ULA_NET_PREFIX_LEN, &ipv6_addr);
-                                        // // AdpSetRequestSync(ADP_IB_PREFIX_TABLE,0,sizeof(struct ipv6_prefix),(uint8_t*)&net_prefix, &pSetConfirm);
-                                        // unsafe {
-                                        //     let v = v6prefix.to_raw_data().to_vec();
-                                        //     let request = AdpSetRequest::new (adp::EAdpPibAttribute::ADP_IB_PREFIX_TABLE, 0, &v);
-                                        //     cs.send(usi::Message::UsiOut(request.into()));
-                                        // }
+                                        log::info!("Setting ipv6 network prefix");
+                                        let v6prefix = ipv6_prefix::new(*app_config::ULA_NET_PREFIX_LEN, &ipv6_addr);
+                                        // AdpSetRequestSync(ADP_IB_PREFIX_TABLE,0,sizeof(struct ipv6_prefix),(uint8_t*)&net_prefix, &pSetConfirm);
+                                        unsafe {
+                                            let v = v6prefix.to_raw_data().to_vec();
+                                            let request = AdpSetRequest::new (adp::EAdpPibAttribute::ADP_IB_PREFIX_TABLE, 0, &v);
+                                            cs.send(usi::Message::UsiOut(request.into()));
+                                        }
                                        }
                                     },
                                     _ => {}
