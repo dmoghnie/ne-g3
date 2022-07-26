@@ -489,7 +489,7 @@ impl NetworkManager {
                                             //     let request = AdpSetRequest::new(EAdpPibAttribute::ADP_IB_MANUF_IPV6_ULA_DEST_SHORT_ADDRESS, 0, &v);
                                             //     self.cmd_tx.send(usi::Message::UsiOut(request.into()));
                                             // }               
-                                            let v = short_addr.to_le_bytes().to_vec();
+                                            let v = short_addr.to_be_bytes().to_vec();
                                             log::info!("Setting short addr for packet destination {} : {} : {:?}", dst_addr, short_addr, v);
                                             current_out_msg = Some(pkt);
                                             let request = AdpSetRequest::new(EAdpPibAttribute::ADP_IB_MANUF_IPV6_ULA_DEST_SHORT_ADDRESS, 0, &v);

@@ -558,6 +558,7 @@ pub fn usi_message_to_message(msg: &InMessage) -> Option<Message> {
                     }
                 }
                 G3_SERIAL_MSG_ADP_NETWORK_STATUS_INDICATION => {
+                    log::debug!("Received network status indication");
                     if let Some(network_status_indication) = AdpG3NetworkStatusEvent::try_from_message(&msg){
                         return Some(Message::AdpG3NetworkStatusEvent(network_status_indication));
                     }
@@ -566,6 +567,7 @@ pub fn usi_message_to_message(msg: &InMessage) -> Option<Message> {
                     }
                 }
                 G3_SERIAL_MSG_ADP_DATA_INDICATION => {
+                    log::debug!("Received ADP Data Indication");
                     if let Some(data_indication) = AdpG3DataEvent::try_from_message(&msg){
                         return Some(Message::AdpG3DataEvent(data_indication));
                     }
