@@ -35,8 +35,6 @@ pub const CONF_CONTEXT_INFORMATION_TABLE_1: [u8; 12] = [
     0x2, 0x0, 0x1, 0x40, 0xfd, 0x00, 0x0, 0x0, 0x0, 0x2, 0x78, 0x1d,
 ];
 
-// 0xfd, 0x00, 0x00, 0x00, 0x00, 0x02, 0x78, 0x1d
-
 pub const X_IDS_ARIB: [u8; 34] = [0x53, 0x4D, 0xAD, 0xB2, 0xC4, 0xD5, 0xE6, 0xFA, 0x53, 0x4D, 0xAD, 0xB2, 0xC4, 0xD5, 0xE6, 0xFA,
 0x53, 0x4D, 0xAD, 0xB2, 0xC4, 0xD5, 0xE6, 0xFA, 0x53, 0x4D, 0xAD, 0xB2, 0xC4, 0xD5, 0xE6, 0xFA,
 0x53, 0x4D];
@@ -145,7 +143,7 @@ lazy_static! {
                 G3ParamType::Adp,
                 adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL.into(),
                 0,
-                vec![0x0]
+                vec![0x5]
             ),
             (
                 G3ParamType::Adp,
@@ -162,12 +160,12 @@ lazy_static! {
 
     pub static ref MODEM_PARAMS: Vec<G3Param> = {
         let params = vec![
-            (
-                G3ParamType::Mac,
-                adp::EMacWrpPibAttribute::MAC_WRP_PIB_SHORT_ADDRESS.into(),
-                0,
-                vec![0x0, 0x1]
-            ),
+            // (
+            //     G3ParamType::Mac,
+            //     adp::EMacWrpPibAttribute::MAC_WRP_PIB_SHORT_ADDRESS.into(),
+            //     0,
+            //     vec![0x0, 0x1]
+            // ),
             (
                 G3ParamType::Mac,
                 adp::EMacWrpPibAttribute::MAC_WRP_PIB_PAN_ID.into(),
@@ -194,7 +192,7 @@ lazy_static! {
                 G3ParamType::Adp,
                 adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL.into(),
                 0,
-                vec![0x0]
+                vec![0x5]
             ),
             (
                 G3ParamType::Adp,
