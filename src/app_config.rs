@@ -143,7 +143,7 @@ lazy_static! {
                 G3ParamType::Adp,
                 adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL.into(),
                 0,
-                vec![0x5]
+                vec![0x0]
             ),
             (
                 G3ParamType::Adp,
@@ -192,7 +192,7 @@ lazy_static! {
                 G3ParamType::Adp,
                 adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL.into(),
                 0,
-                vec![0x5]
+                vec![0x0]
             ),
             (
                 G3ParamType::Adp,
