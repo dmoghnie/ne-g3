@@ -123,7 +123,7 @@ lazy_static! {
                 0,
                 PAN_ID.to_be_bytes().to_vec()
             ),
-            (G3ParamType::Adp, adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL.into(), 0, vec![0x00]),
+            (G3ParamType::Adp, adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL.into(), 0, vec![0x05]),
     
             (
                 G3ParamType::Adp,
@@ -167,7 +167,7 @@ lazy_static! {
                 0,
                 PAN_ID.to_be_bytes().to_vec()
             ),
-            (G3ParamType::Adp, adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL.into(), 0, vec![0x00]),
+            (G3ParamType::Adp, adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL.into(), 0, vec![0x05]),
     
             (
                 G3ParamType::Adp,
