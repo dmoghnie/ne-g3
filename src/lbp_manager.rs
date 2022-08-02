@@ -165,7 +165,7 @@ impl LbpManager {
     pub fn new() -> Self {
         let mut id_s: TEapPskNetworkAccessIdentifierS =
             TEapPskNetworkAccessIdentifierS(app_config::X_IDS_CENELEC_FCC.to_vec());
-        if app_config::BAND == TAdpBand::ADP_BAND_ARIB {
+        if *app_config::BAND == TAdpBand::ADP_BAND_ARIB {
             id_s = TEapPskNetworkAccessIdentifierS(app_config::X_IDS_ARIB.to_vec());
         }
 
@@ -230,7 +230,7 @@ impl LbpManager {
                 p_data.push(CONF_PARAM_GMK);
                 p_data.push(17);
                 p_data.push(p_au8_curr_index);
-                p_data.append(app_config::g_au8CurrGMK.to_vec().borrow_mut());
+                p_data.append(app_config::GMK.to_vec().borrow_mut());
 
                 p_data.push(CONF_PARAM_GMK_ACTIVATION);
                 p_data.push(1);
@@ -239,7 +239,7 @@ impl LbpManager {
                 p_data.push(CONF_PARAM_GMK);
                 p_data.push(17);
                 p_data.push(p_au8_curr_index ^ 0x01);
-                p_data.append(app_config::g_au8RekeyGMK.to_vec().borrow_mut());
+                p_data.append(app_config::REKEY_GMK.to_vec().borrow_mut());
             }
 
             log::info!("[BS] Encoding Message3.");
@@ -538,7 +538,7 @@ impl LbpManager {
                     addr.into(),
                     out,
                     device.uc_tx_handle - 1,
-                    app_config::MAX_HOPS,
+                    *app_config::MAX_HOPS,
                     true,
                     0,
                     false,

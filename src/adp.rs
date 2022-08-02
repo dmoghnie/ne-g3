@@ -1,6 +1,8 @@
 use crate::usi;
+use num_enum::FromPrimitive;
 use num_enum::IntoPrimitive;
 use num_enum::TryFromPrimitive;
+use serde::Deserialize;
 use std::fmt;
 use std::net::Ipv6Addr;
 use usi::InMessage;
@@ -217,7 +219,7 @@ impl Into<Vec<u8>> for TAddress {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, TryFromPrimitive, IntoPrimitive)]
+#[derive(Debug, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Deserialize, Clone)]
 #[repr(u8)]
 pub enum TAdpBand {
     ADP_BAND_CENELEC_A = 0,

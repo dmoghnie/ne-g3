@@ -15,7 +15,7 @@ num_enum = "0.5.7"
 # crossbeam = "0.8.1"
 # crossbeam-channel = "0.5.4"
 flume = "0.10.13"
-clap = "3.1.18"
+clap = { version = "3.2.15", features = ["derive"] }
 thiserror="1.0.31"
 lazy_static = "1.4.0"
 

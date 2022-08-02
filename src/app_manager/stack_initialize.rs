@@ -1,5 +1,9 @@
 use crate::{app_config, usi, request::{AdpSetRequest, AdpInitializeRequest, self}, app_manager::Idle, adp};
 
+use num_enum::IntoPrimitive;
+use num_enum::TryFromPrimitive;
+
+
 use super::{Stateful, Response, State, Message, Context};
 
 pub struct StackInitialize {
@@ -19,7 +23,7 @@ impl StackInitialize {
 impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for StackInitialize {
     fn on_enter(&mut self, cs: &flume::Sender<usi::Message>, context: &mut Context) -> Response<State> {
         log::info!("State : StackInitialize - onEnter - coordinator : {}", context.is_coordinator);
-        let request = request::AdpInitializeRequest::from_band(app_config::BAND);
+        let request = request::AdpInitializeRequest::from_band(&app_config::BAND);
         match cs.send(usi::Message::UsiOut(request.into())) {
             Ok(_) => {
                 Response::Handled

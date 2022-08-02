@@ -2,11 +2,14 @@ use std::borrow::Borrow;
 use std::borrow::BorrowMut;
 
 use crate::adp::TAddress;
+use crate::adp::TAdpBand;
 use crate::common;
 use crate::adp;
 use crate::usi;
 use crate::usi::OutMessage;
-use num_enum;
+use num_enum::IntoPrimitive;
+use num_enum::TryFromPrimitive;
+
 #[derive(Debug)]
 pub struct AdpInitializeRequest {    
     band: u8
@@ -17,8 +20,8 @@ impl AdpInitializeRequest {
             band
         }
     }
-    pub fn from_band(band:adp::TAdpBand ) -> AdpInitializeRequest {
-        AdpInitializeRequest { band: band.into() }
+    pub fn from_band(band: &adp::TAdpBand ) -> AdpInitializeRequest {
+        AdpInitializeRequest { band: TAdpBand::into(band.clone()) }
     }
 }
 

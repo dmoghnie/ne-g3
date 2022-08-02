@@ -15,7 +15,6 @@ use flume::SendError;
 use crate::adp;
 
 use crate::adp::TExtendedAddress;
-use crate::app;
 use crate::app_config;
 use crate::app_manager::ready::Ready;
 use crate::app_manager::set_params::SetParams;
@@ -29,6 +28,7 @@ use crate::usi;
 use self::get_params::GetParams;
 use self::idle::Idle;
 use self::join_network::JoinNetwork;
+use self::set_coord_short_addr::SetCoordShortAddr;
 use self::start_network::StartNetwork;
 
 mod stack_initialize;
@@ -38,10 +38,12 @@ mod join_network;
 mod idle;
 mod get_params;
 mod start_network;
+mod set_coord_short_addr;
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
 pub enum State {
     Idle,
+    SetCoordShortAddr,
     StackInitialize,
     SetParams,
     GetParams,
@@ -201,6 +203,7 @@ impl AppManager {
         state_machine.add_state(State::JoinNetwork, Box::new(JoinNetwork::new()));
         state_machine.add_state(State::StartNetwork, Box::new(StartNetwork::new()));
         state_machine.add_state(State::Ready, Box::new(Ready::new()));
+        state_machine.add_state(State::SetCoordShortAddr, Box::new(SetCoordShortAddr {}));
     }
     pub fn start(self, usi_receiver: flume::Receiver<usi::Message>, is_coordinator: bool) {
         log::info!("App Manager started ...");
