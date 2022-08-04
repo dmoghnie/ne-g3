@@ -34,7 +34,7 @@ ids_cenelec_fcc = [0x81, 0x72, 0x63, 0x54, 0x45, 0x36, 0x27, 0x18]
 
 [serial]
 name = "/dev/tty.usbserial-0001"
-speed = 230400
+speed = 921600
 
 [network]
 # tun = "tun0"

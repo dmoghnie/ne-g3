@@ -97,16 +97,16 @@ impl TunDevice {
 
 
     
-    pub fn start(self, short_addr: u16, mut rx: flume::Receiver<TunMessage>, extended_addr: &Option<TExtendedAddress>) {
+    pub fn start(self, settings: &app_config::Settings, short_addr: u16, mut rx: flume::Receiver<TunMessage>, extended_addr: &Option<TExtendedAddress>) {
         use std::{thread::sleep, time::Duration, io::Read, io::Write};
 
 
-        use crate::app_config::PAN_ID;
         /*fd00:0:2:781d:1122:3344:5566:1 */
         
-        let local_link = app_config::local_ipv6_add_from_pan_id_short_addr(*PAN_ID, short_addr).unwrap();
+        let local_link = app_config::local_ipv6_add_from_pan_id_short_addr(&settings.network.local_net_prefix, settings.g3.pan_id, short_addr).unwrap();
         let mut ula: Option<Ipv6Addr> = None;
-        ula = app_config::ula_ipv6_addr_from_pan_id_short_addr(*PAN_ID, short_addr);
+        ula = app_config::ula_ipv6_addr_from_pan_id_short_addr(&settings.network.ula_net_prefix, 
+            &settings.network.ula_host_prefix, settings.g3.pan_id, short_addr);
         // if let Some(extended_addr) = extended_addr {            
         //     ula = app_config::ula_ipv6_addr_from_pan_id_extended_addr(*PAN_ID, extended_addr);
         // }
@@ -123,14 +123,14 @@ impl TunDevice {
                 "add",
                 "dev",
                 tun_interface.name(),
-                &format!("{}/{}", local_link, *app_config::LOCAL_NET_PREFIX_LEN),
+                &format!("{}/{}", local_link, settings.network.local_net_prefix_len),
             ],
         );
         if let Some(ula) = ula {
         cmd(
             "ip",
             "ip",
-            &["addr", "add", "dev", tun_interface.name(), &format!("{}/{}", ula, *app_config::ULA_NET_PREFIX_LEN)],
+            &["addr", "add", "dev", tun_interface.name(), &format!("{}/{}", ula, settings.network.ula_net_prefix_len)],
         );
     }
         
@@ -143,13 +143,13 @@ impl TunDevice {
         &[
             tun_interface.name(),
             "inet6",            
-            &format!("{}/{}", local_link, *app_config::LOCAL_NET_PREFIX_LEN)
+            &format!("{}/{}", local_link, settings.network.local_net_prefix_len)
         ]);
         if let Some(ula) = ula {
         cmd(
             "ifconfig",
             "ifconfig",
-            &[tun_interface.name(), "inet6", &format!("{}/{}", ula, *app_config::ULA_NET_PREFIX_LEN)],
+            &[tun_interface.name(), "inet6", &format!("{}/{}", ula, settings.network.ula_net_prefix_len)],
         );
     }
 
@@ -242,10 +242,9 @@ impl TunDevice {
     }
 }
 
-pub struct NetworkManager {
-    pan_id: u16,
+pub struct NetworkManager {    
     cmd_tx: flume::Sender<usi::Message>,
-    tun_devices: HashMap<u16, flume::Sender<TunMessage>>,
+    tun_devices: HashMap<u16, flume::Sender<TunMessage>>    
 }
 /*
 By design, the G3-PLC protocol stack allows native support of the IPv6 protocol, which grants end-user flexibility to fulfil business requirements when choosing the appropriate higher layers (ISO/OSI transport and application layers). This key feature also secures G3-PLC infrastructures in the long term, thanks to the scalability and future application compatibility provided by IPv6.
@@ -262,10 +261,9 @@ The link local prefix always equals:
 fe80:0000:0000:0000 (hexadecimal representation)
 
 */
-impl NetworkManager {
-    pub fn new(pan_id: u16, cmd_tx: flume::Sender<usi::Message>) -> Self {
-        NetworkManager {
-            pan_id,
+impl <'a> NetworkManager {
+    pub fn new(settings: &'a app_config::Settings, cmd_tx: flume::Sender<usi::Message>) -> Self {
+        NetworkManager {            
             cmd_tx: cmd_tx,
             tun_devices: HashMap::new(),
         }
@@ -341,15 +339,17 @@ impl NetworkManager {
 
 
 
-    pub fn start(mut self, mut rx: flume::Receiver<adp::Message>) {
+    pub fn start(mut self, settings: &'a app_config::Settings, mut rx: flume::Receiver<adp::Message>) {
         let (tun_tx, mut tun_rx) = flume::unbounded::<TunMessage>();
         log::info!("network manager starting ...");
 
         let mut extended_addr :Option<TExtendedAddress> =  None;
 
+        let settings = settings.clone();
+
         thread::spawn(move || {
             let mut buffer_available = true;
-            let mut lbp_manager = lbp_manager::LbpManager::new();
+            let mut lbp_manager = lbp_manager::LbpManager::new(&settings.g3);
             let mut current_short_dst_addr:Option<u16> = None;
             let mut current_out_msg : Option<Vec<u8>> = None;
 
@@ -407,7 +407,7 @@ impl NetworkManager {
                                         self.tun_devices.insert(short_addr, tx);
 
                                         
-                                        tun_device.start(short_addr, rx, &extended_addr);
+                                        tun_device.start(&settings, short_addr, rx, &extended_addr);
                                     }
                                 }
                                 else{
@@ -427,7 +427,7 @@ impl NetworkManager {
                                         let (tx, mut rx) = flume::unbounded::<TunMessage>();
                                         self.tun_devices.insert(short_addr, tx);
 
-                                        tun_device.start(short_addr, rx, &extended_addr);
+                                        tun_device.start(&settings, short_addr, rx, &extended_addr);
                                     }
                                 }
                             }

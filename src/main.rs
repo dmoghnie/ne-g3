@@ -13,11 +13,13 @@ mod usi;
 mod tun_interface;
 mod app_manager;
 
+use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 use std::{env, io, str, thread};
 
 use env_logger::Env;
 use flume::{Receiver, Sender};
+use num_enum::TryFromPrimitive;
 
 
 use std::io::{Read, Result as IoResult, Write};
@@ -52,6 +54,10 @@ struct Cli {
     #[clap(short, long)]
     speed: Option<u32>,
 
+    #[clap(short, long, default_value_t = String::from("ne-g3.toml"))]
+    config: String,
+    
+
 }
 
 
@@ -74,10 +80,13 @@ fn main() {
         env::set_var("NEG3_SERIAL.SPEED", device_speed.to_string());
     }
 
+    log::trace!("Config file = {}", cli.config);
 
-    let s = app_config::SETTINGS.read().unwrap();
+    let settings = app_config::Settings::new(&cli.config).unwrap();
 
-    log::info!("Settings : {:?}", s);
+    // let s = app_config::SETTINGS.read().unwrap();
+
+    log::info!("Settings : {:?}", settings);
 
 
     info!("Starting ...");
@@ -91,11 +100,11 @@ fn main() {
     //     .parse()
     //     .unwrap_or(false);
 
-    let is_coordinator = *app_config::MODE == Mode::Coordinator;
+    let is_coordinator = Mode::try_from_primitive(settings.g3.mode).unwrap() == Mode::Coordinator;
     
 
-    log::info!("Port : {:?}, coordinator {}", *app_config::SERIAL_NAME, is_coordinator);
-    let mut port = serialport::new(&(*app_config::SERIAL_NAME), 921_600)
+    log::info!("Port : {:?}, coordinator {}", settings.serial.name, is_coordinator);
+    let mut port = serialport::new(&(settings.serial.name), settings.serial.speed)
         .timeout(Duration::from_millis(10))
         .open()
         .expect("Failed to open port {}");
@@ -113,13 +122,13 @@ fn main() {
     let (tx, rx) = flume::unbounded::<adp::Message>();
     let usi_tx = usi.start(tx_port);
     let app_manager = AppManager::new(usi_tx.clone(), tx);
-    app_manager.start(app_usi_rx, is_coordinator);
+    app_manager.start(&settings, app_usi_rx, is_coordinator);
 
    
     
-    let network_manager = network_manager::NetworkManager::new(s.g3.pan_id, usi_tx);
+    let network_manager = network_manager::NetworkManager::new(&settings, usi_tx);
 
-    network_manager.start(rx);
+    network_manager.start(&settings, rx);
     log::info!("Network Manager started ...");
     
     

@@ -18,6 +18,10 @@ use crate::lbp::JoiningMessage;
 use crate::lbp_functions::*;
 use crate::request;
 
+use num_enum::IntoPrimitive;
+use num_enum::FromPrimitive;
+use num_enum::TryFromPrimitive;
+
 const UC_MESSAGE_TIMEOUT_MS: u128 = 40_000;
 
 const CONF_PARAM_SHORT_ADDR: u8 = 0x1D;
@@ -159,14 +163,19 @@ pub struct LbpManager {
     start_time: Instant,
     g_u32_nonce: u32,
     device_manager: DeviceManager,
+    gmk: Vec<u8>,
+    rekey_gmk: Vec<u8>,
+    psk: TEapPskKey,
+    max_hops: u8
 }
 
 impl LbpManager {
-    pub fn new() -> Self {
+    pub fn new(g3_config: &app_config::G3) -> Self {
         let mut id_s: TEapPskNetworkAccessIdentifierS =
-            TEapPskNetworkAccessIdentifierS(app_config::X_IDS_CENELEC_FCC.to_vec());
-        if *app_config::BAND == TAdpBand::ADP_BAND_ARIB {
-            id_s = TEapPskNetworkAccessIdentifierS(app_config::X_IDS_ARIB.to_vec());
+            TEapPskNetworkAccessIdentifierS(g3_config.ids_cenelec_fcc.clone());
+            
+        if TAdpBand::try_from_primitive(g3_config.band).unwrap() == TAdpBand::ADP_BAND_ARIB {
+            id_s = TEapPskNetworkAccessIdentifierS(g3_config.ids_arib.clone());
         }
 
         LbpManager {
@@ -180,10 +189,14 @@ impl LbpManager {
             start_time: Instant::now(),
             g_u32_nonce: 0,
             device_manager: DeviceManager::new(),
+            gmk: g3_config.gmk.clone(),
+            rekey_gmk: g3_config.rekey_gmk.clone(),
+            psk: TEapPskKey(g3_config.psk),
+            max_hops: g3_config.max_hops
         }
     }
 
-    fn process_joining_eap_t1(
+    fn process_joining_eap_t1(gmk: &Vec<u8>, rekey_gmk: &Vec<u8>,
         p_eap_data: &[u8],
         p_device: &mut DeviceSlot,
         p_id_s: &TEapPskNetworkAccessIdentifierS,
@@ -230,7 +243,7 @@ impl LbpManager {
                 p_data.push(CONF_PARAM_GMK);
                 p_data.push(17);
                 p_data.push(p_au8_curr_index);
-                p_data.append(app_config::GMK.to_vec().borrow_mut());
+                p_data.extend_from_slice(gmk);
 
                 p_data.push(CONF_PARAM_GMK_ACTIVATION);
                 p_data.push(1);
@@ -239,7 +252,7 @@ impl LbpManager {
                 p_data.push(CONF_PARAM_GMK);
                 p_data.push(17);
                 p_data.push(p_au8_curr_index ^ 0x01);
-                p_data.append(app_config::REKEY_GMK.to_vec().borrow_mut());
+                p_data.extend_from_slice(rekey_gmk);
             }
 
             log::info!("[BS] Encoding Message3.");
@@ -341,7 +354,7 @@ impl LbpManager {
             }
             //First join message
             if (device.state == DeviceState::BS_STATE_WAITING_JOINNING) {
-                eap_psk_initialize(&app_config::G_EAP_PSK_KEY, &mut device.m_psk_context);
+                eap_psk_initialize(&self.psk, &mut device.m_psk_context);
                 device.m_rand_s = TEapPskRand::new_random(); //TODO for testing we need deterministic to compare between the C coordinator and Rust coordinator
                                                             // device.m_randS = config::RAND_S_DEFAULT.to_vec().into();
 
@@ -379,7 +392,8 @@ impl LbpManager {
                         && (device.state == DeviceState::BS_STATE_WAITING_EAP_MSG_2
                             || device.state == DeviceState::BS_STATE_SENT_EAP_MSG_1)
                     {
-                        if let Some(result) = LbpManager::process_joining_eap_t1(
+                        if let Some(result) = Self::process_joining_eap_t1(
+                            &self.gmk, &self.rekey_gmk,
                             &p_eap_data,
                             &mut device,
                             &self.g_id_s,
@@ -538,7 +552,7 @@ impl LbpManager {
                     addr.into(),
                     out,
                     device.uc_tx_handle - 1,
-                    *app_config::MAX_HOPS,
+                    self.max_hops,
                     true,
                     0,
                     false,

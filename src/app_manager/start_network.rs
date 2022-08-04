@@ -21,7 +21,7 @@ impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for Sta
         context: &mut Context,
     ) -> Response<State> {
         log::info!("State : StartNetwork - onEnter : context {:?}", context);
-        let cmd = request::AdpNetworkStartRequest::new(*app_config::PAN_ID);
+        let cmd = request::AdpNetworkStartRequest::new(context.settings.g3.pan_id);
         if let Err(e) = cs.send(usi::Message::UsiOut(cmd.into())) {
             log::warn!("Failed to send network start request {}", e);
         }

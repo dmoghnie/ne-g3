@@ -23,7 +23,7 @@ impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for Joi
         log::info!("State : JoinNetwork - onEnter : context {:?}", context);
 
         let cmd = request::AdpJoinNetworkRequest {
-            pan_id: *app_config::PAN_ID,
+            pan_id: context.settings.g3.pan_id,
             lba_address: 0,
         };
         if let Err(e) = cs.send(usi::Message::UsiOut(cmd.into())) {

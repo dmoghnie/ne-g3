@@ -175,6 +175,7 @@ where
 pub struct Context {
     is_coordinator: bool,
     extended_addr: Option<TExtendedAddress>,
+    settings: app_config::Settings
    
 }
 
@@ -205,14 +206,15 @@ impl AppManager {
         state_machine.add_state(State::Ready, Box::new(Ready::new()));
         state_machine.add_state(State::SetCoordShortAddr, Box::new(SetCoordShortAddr {}));
     }
-    pub fn start(self, usi_receiver: flume::Receiver<usi::Message>, is_coordinator: bool) {
+    pub fn start(self, settings: &app_config::Settings,  usi_receiver: flume::Receiver<usi::Message>, is_coordinator: bool) {
         log::info!("App Manager started ...");
+        let settings = settings.clone();
         thread::spawn(move || {
             let mut state_machine =
                 StateMachine::<State, usi::Message, flume::Sender<usi::Message>, Context>::new(
                     State::Idle,
                     self.usi_tx.clone(),
-                    Context { is_coordinator: is_coordinator, extended_addr: None }
+                    Context { is_coordinator: is_coordinator, extended_addr: None, settings: settings }
                 );
             // let mut lbp_manager = lbp_manager::LbpManager::new();
             Self::init_states(&mut state_machine);

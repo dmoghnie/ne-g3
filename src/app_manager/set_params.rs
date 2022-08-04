@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 
 use crate::{
+    adp,
     app_config::{self, G3ParamType},
     request::{AdpMacSetRequest, AdpSetRequest},
     usi,
@@ -14,18 +15,140 @@ pub struct SetParams {
 
 impl SetParams {
     pub fn new() -> Self {
-        SetParams {
-           params: None,           
+        SetParams { params: None }
+    }
+    fn init_params(&mut self, context: &Context) {
+        if context.is_coordinator {
+            let params = vec![
+                (
+                    G3ParamType::Mac,
+                    adp::EMacWrpPibAttribute::MAC_WRP_PIB_PAN_ID.into(),
+                    0,
+                    context.settings.g3.pan_id.to_be_bytes().to_vec(),
+                ),
+                (
+                    G3ParamType::Mac,
+                    adp::EMacWrpPibAttribute::MAC_WRP_PIB_KEY_TABLE.into(),
+                    0,
+                    context.settings.g3.gmk.to_vec(),
+                ),
+                //TODO rekey
+                (
+                    G3ParamType::Adp,
+                    adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL.into(),
+                    0,
+                    vec![0x05],
+                ), //TODO, parameterize
+                (
+                    G3ParamType::Adp,
+                    adp::EAdpPibAttribute::ADP_IB_ACTIVE_KEY_INDEX.into(),
+                    0,
+                    vec![0x00],
+                ), //TODO parameterize
+                (
+                    G3ParamType::Adp,
+                    adp::EAdpPibAttribute::ADP_IB_MAX_JOIN_WAIT_TIME.into(),
+                    0,
+                    vec![0x10, 0x00],
+                ),
+                (
+                    G3ParamType::Adp,
+                    adp::EAdpPibAttribute::ADP_IB_MAX_HOPS.into(),
+                    0,
+                    vec![context.settings.g3.max_hops],
+                ),
+                (
+                    G3ParamType::Adp,
+                    adp::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY.into(),
+                    0,
+                    context.settings.g3.psk.to_vec(),
+                ),
+                (
+                    G3ParamType::Adp,
+                    adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE.into(),
+                    0,
+                    context.settings.g3.context_information_table_0.clone(),
+                ),
+                (
+                    G3ParamType::Adp,
+                    adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE.into(),
+                    1,
+                    context.settings.g3.context_information_table_1.clone(),
+                ),
+                (
+                    G3ParamType::Adp,
+                    adp::EAdpPibAttribute::ADP_IB_ROUTING_TABLE_ENTRY_TTL.into(),
+                    0,
+                    vec![0xB4, 0x00],
+                ),
+                (
+                    G3ParamType::Mac,
+                    adp::EMacWrpPibAttribute::MAC_WRP_PIB_SHORT_ADDRESS.into(),
+                    0,
+                    vec![0x0u8, 0x0u8],
+                ),
+            ];
+            self.params = Some(params.into());
+        } else {
+            let params = vec![
+                (
+                    G3ParamType::Mac,
+                    adp::EMacWrpPibAttribute::MAC_WRP_PIB_PAN_ID.into(),
+                    0,
+                    context.settings.g3.pan_id.to_be_bytes().to_vec()                    
+                ),
+                (
+                    G3ParamType::Adp,
+                    adp::EAdpPibAttribute::ADP_IB_SECURITY_LEVEL.into(),
+                    0,
+                    vec![0x05],
+                ),
+                (
+                    G3ParamType::Adp,
+                    adp::EAdpPibAttribute::ADP_IB_MAX_JOIN_WAIT_TIME.into(),
+                    0,
+                    vec![0x10, 0x00],
+                ),
+                (
+                    G3ParamType::Adp,
+                    adp::EAdpPibAttribute::ADP_IB_MAX_HOPS.into(),
+                    0,
+                    vec![context.settings.g3.max_hops],
+                ),
+                (
+                    G3ParamType::Adp,
+                    adp::EAdpPibAttribute::ADP_IB_MANUF_EAP_PRESHARED_KEY.into(),
+                    0,
+                    context.settings.g3.psk.to_vec()                    
+                ),
+                (
+                    G3ParamType::Adp,
+                    adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE.into(),
+                    0,
+                    context.settings.g3.context_information_table_0.clone()
+                ),
+                (
+                    G3ParamType::Adp,
+                    adp::EAdpPibAttribute::ADP_IB_CONTEXT_INFORMATION_TABLE.into(),
+                    1,
+                    context.settings.g3.context_information_table_1.clone()            
+                ),
+                (
+                    G3ParamType::Adp,
+                    adp::EAdpPibAttribute::ADP_IB_ROUTING_TABLE_ENTRY_TTL.into(),
+                    0,
+                    vec![0xB4, 0x00],
+                ),
+            ];
+            self.params = Some(params.into());
         }
     }
-    fn set_param(
-        &self,
-        cs: &flume::Sender<usi::Message>,
-        param: &app_config::G3Param,
-    ) -> bool {
-        let msg = 
-            if param.0 == G3ParamType::Mac {AdpMacSetRequest::new(param.1.try_into().unwrap(), param.2, &param.3).into()} 
-                else {AdpSetRequest::new(param.1.try_into().unwrap(), param.2, &param.3).into()};
+    fn set_param(&self, cs: &flume::Sender<usi::Message>, param: &app_config::G3Param) -> bool {
+        let msg = if param.0 == G3ParamType::Mac {
+            AdpMacSetRequest::new(param.1.try_into().unwrap(), param.2, &param.3).into()
+        } else {
+            AdpSetRequest::new(param.1.try_into().unwrap(), param.2, &param.3).into()
+        };
         match cs.send(usi::Message::UsiOut(msg)) {
             Ok(_) => true,
             Err(e) => {
@@ -34,13 +157,13 @@ impl SetParams {
             }
         }
     }
-        
+
     fn send_next_param(&mut self, cs: &flume::Sender<usi::Message>) -> bool {
         if let Some(params) = &mut self.params {
             if let Some(param) = params.pop_front() {
                 return self.set_param(cs, &param);
             }
-        } 
+        }
         false
     }
 }
@@ -52,12 +175,7 @@ impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for Set
         context: &mut Context,
     ) -> Response<State> {
         log::info!("State : SetParams - onEnter");
-        if context.is_coordinator {
-            self.params = Some(app_config::COORD_PARAMS.to_vec().into());
-        } else {
-            self.params =  Some(app_config::MODEM_PARAMS.to_vec().into());
-
-        }
+        self.init_params(context);
         self.send_next_param(cs);
         Response::Handled
     }
