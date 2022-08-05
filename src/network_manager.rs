@@ -526,7 +526,7 @@ impl <'a> NetworkManager {
 
                  }
                  else {
-                    // tun_rx.drain();
+                    tun_rx.drain();
                 }
                 sleep(Duration::from_millis(10)); //TODO, spin threads and recv instead of try_recv
             }
