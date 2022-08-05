@@ -172,7 +172,7 @@ impl TunDevice {
                 match iface_reader.recv(&mut buf) {
                     Ok(size) => {
                         log::info!("tun received {} bytes", size);
-                        if size > 0 && buffers_available.load(Ordering::Relaxed){
+                        if size > 0 && buffers_available.load(Ordering::SeqCst){
                             match infer_proto(&buf[skip..]) {
                                 PacketProtocol::IPv4 => {
                                     log::warn!("Protocol IPV4 not implemented yet");
@@ -435,7 +435,7 @@ impl <'a> NetworkManager {
                             }
                             adp::Message::AdpG3BufferEvent(event) => {
                                 log::info!("Received buffer ready : {}", event.buffer_ready);
-                                self.buffers_available.store(event.buffer_ready, Ordering::Relaxed);                                
+                                self.buffers_available.store(event.buffer_ready, Ordering::SeqCst);                                
                             }
                             adp::Message::AdpG3LbpEvent(lbp_event) => {
                                 if let Some(lbp_message) = lbp::adp_message_to_lbp_message(&lbp_event) {
@@ -472,7 +472,7 @@ impl <'a> NetworkManager {
                     }
                     Err(_) => {}
                 }
-                 if self.buffers_available.load(Ordering::Relaxed) {
+                 if self.buffers_available.load(Ordering::SeqCst) {
                     match tun_rx.try_recv() {
                         Ok(msg) => {
                             match msg.payload {
