@@ -97,7 +97,7 @@ impl TunDevice {
 
 
     
-    pub fn start(self, settings: &app_config::Settings, short_addr: u16, mut rx: flume::Receiver<TunMessage>, extended_addr: &Option<TExtendedAddress>) {
+    pub fn start(self, buffers_available: Arc<AtomicBool>, settings: &app_config::Settings, short_addr: u16, mut rx: flume::Receiver<TunMessage>, extended_addr: &Option<TExtendedAddress>) {
         use std::{thread::sleep, time::Duration, io::Read, io::Write};
 
 
@@ -172,7 +172,7 @@ impl TunDevice {
                 match iface_reader.recv(&mut buf) {
                     Ok(size) => {
                         log::info!("tun received {} bytes", size);
-                        if size > 0 {
+                        if size > 0 && buffers_available.load(Ordering::Relaxed){
                             match infer_proto(&buf[skip..]) {
                                 PacketProtocol::IPv4 => {
                                     log::warn!("Protocol IPV4 not implemented yet");
@@ -244,7 +244,8 @@ impl TunDevice {
 
 pub struct NetworkManager {    
     cmd_tx: flume::Sender<usi::Message>,
-    tun_devices: HashMap<u16, flume::Sender<TunMessage>>    
+    tun_devices: HashMap<u16, flume::Sender<TunMessage>>,
+    buffers_available: Arc<AtomicBool>
 }
 /*
 By design, the G3-PLC protocol stack allows native support of the IPv6 protocol, which grants end-user flexibility to fulfil business requirements when choosing the appropriate higher layers (ISO/OSI transport and application layers). This key feature also secures G3-PLC infrastructures in the long term, thanks to the scalability and future application compatibility provided by IPv6.
@@ -263,7 +264,8 @@ fe80:0000:0000:0000 (hexadecimal representation)
 */
 impl <'a> NetworkManager {
     pub fn new(settings: &'a app_config::Settings, cmd_tx: flume::Sender<usi::Message>) -> Self {
-        NetworkManager {            
+        NetworkManager { 
+            buffers_available: Arc::new(AtomicBool::new(true)),           
             cmd_tx: cmd_tx,
             tun_devices: HashMap::new(),
         }
@@ -348,7 +350,7 @@ impl <'a> NetworkManager {
         let settings = settings.clone();
 
         thread::spawn(move || {
-            let mut buffer_available = true;
+
             let mut lbp_manager = lbp_manager::LbpManager::new(&settings.g3);
             let mut current_short_dst_addr:Option<u16> = None;
             let mut current_out_msg : Option<Vec<u8>> = None;
@@ -407,7 +409,7 @@ impl <'a> NetworkManager {
                                         self.tun_devices.insert(short_addr, tx);
 
                                         
-                                        tun_device.start(&settings, short_addr, rx, &extended_addr);
+                                        tun_device.start(self.buffers_available.clone(), &settings, short_addr, rx, &extended_addr);
                                     }
                                 }
                                 else{
@@ -427,13 +429,13 @@ impl <'a> NetworkManager {
                                         let (tx, mut rx) = flume::unbounded::<TunMessage>();
                                         self.tun_devices.insert(short_addr, tx);
 
-                                        tun_device.start(&settings, short_addr, rx, &extended_addr);
+                                        tun_device.start(self.buffers_available.clone(),&settings, short_addr, rx, &extended_addr);
                                     }
                                 }
                             }
                             adp::Message::AdpG3BufferEvent(event) => {
                                 log::info!("Received buffer ready : {}", event.buffer_ready);
-                                buffer_available = event.buffer_ready;
+                                self.buffers_available.store(event.buffer_ready, Ordering::Relaxed);                                
                             }
                             adp::Message::AdpG3LbpEvent(lbp_event) => {
                                 if let Some(lbp_message) = lbp::adp_message_to_lbp_message(&lbp_event) {
@@ -470,7 +472,7 @@ impl <'a> NetworkManager {
                     }
                     Err(_) => {}
                 }
-                 if buffer_available {
+                 if self.buffers_available.load(Ordering::Relaxed) {
                     match tun_rx.try_recv() {
                         Ok(msg) => {
                             match msg.payload {
@@ -526,7 +528,7 @@ impl <'a> NetworkManager {
 
                  }
                  else {
-                    tun_rx.drain();
+                    // tun_rx.drain();
                 }
                 sleep(Duration::from_millis(10)); //TODO, spin threads and recv instead of try_recv
             }
