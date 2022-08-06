@@ -246,7 +246,7 @@ pub struct TAdpNetworkStatusIndication {
  * @param u16LbaAddress The 16 bit short address of a device in this PAN to be used as the LBA by the associating device.
  * @param u16RcCoord The estimated route cost from LBA to the coordinator.
  **********************************************************************************************************************/
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TAdpPanDescriptor {
     pub pan_id: u16,
     pub link_quality: u8,
@@ -1076,7 +1076,7 @@ impl AdpG3NetworkStartResponse {
 
 #[derive(Debug)]
 pub struct AdpG3DiscoveryResponse {
-    status: EAdpStatus,
+    pub status: EAdpStatus,
 }
 impl AdpG3DiscoveryResponse {
     pub fn try_from_message(msg: &usi::InMessage) -> Option<AdpG3DiscoveryResponse> {
@@ -1094,40 +1094,7 @@ impl AdpG3DiscoveryResponse {
 pub struct AdpG3NetworkStatusEvent {
     status_indication: TAdpNetworkStatusIndication
 }
-// {
-//     struct TAdpNetworkStatusIndication adpNetworkStatusIndication;
-//       adpNetworkStatusIndication.m_u16PanId = (*ptrMsg++);
-//       adpNetworkStatusIndication.m_u16PanId = (*ptrMsg++) + (adpNetworkStatusIndication.m_u16PanId << 8);
-//       adpNetworkStatusIndication.m_SrcDeviceAddress.m_u8AddrSize = (*ptrMsg++);
-//   if(adpNetworkStatusIndication.m_SrcDeviceAddress.m_u8AddrSize == ADP_ADDRESS_16BITS)
-//   {
-//       memcpy(&adpNetworkStatusIndication.m_SrcDeviceAddress.m_u16ShortAddr, ptrMsg, ADP_ADDRESS_16BITS);
-//       *ptrMsg += ADP_ADDRESS_16BITS;
-//   } else if(adpNetworkStatusIndication.m_SrcDeviceAddress.m_u8AddrSize == ADP_ADDRESS_64BITS){
-//       memcpy(&adpNetworkStatusIndication.m_SrcDeviceAddress.m_ExtendedAddress, ptrMsg, ADP_ADDRESS_16BITS);
-//       *ptrMsg += ADP_ADDRESS_16BITS;
-//   } else {
-//         LOG_IFACE_G3_ADP("ERROR: wrong src address size.\r\n");
-//       return false;
-//   }
-//       adpNetworkStatusIndication.m_DstDeviceAddress.m_u8AddrSize = (*ptrMsg++);
-//   if(adpNetworkStatusIndication.m_DstDeviceAddress.m_u8AddrSize == ADP_ADDRESS_16BITS)
-//   {
-//       memcpy(&adpNetworkStatusIndication.m_DstDeviceAddress.m_u16ShortAddr, ptrMsg, ADP_ADDRESS_16BITS);
-//       *ptrMsg += ADP_ADDRESS_16BITS;
-//   } else if(adpNetworkStatusIndication.m_DstDeviceAddress.m_u8AddrSize == ADP_ADDRESS_64BITS){
-//       memcpy(&adpNetworkStatusIndication.m_DstDeviceAddress.m_ExtendedAddress, ptrMsg, ADP_ADDRESS_16BITS);
-//       *ptrMsg += ADP_ADDRESS_16BITS;
-//   } else {
-//         LOG_IFACE_G3_ADP("ERROR: wrong dst address size.\r\n");
-//       return false;
-//   }
-//   adpNetworkStatusIndication.m_u8Status = (*ptrMsg++);
-//   adpNetworkStatusIndication.m_u8SecurityLevel = (*ptrMsg++);
-//   adpNetworkStatusIndication.m_u8KeyIndex = (*ptrMsg++);
-//   // Trigger the callback
-//   g_adpNotifications.fnctAdpNetworkStatusIndication(&adpNetworkStatusIndication);
-// }
+
 impl AdpG3NetworkStatusEvent {
     pub fn try_from_message(msg: &usi::InMessage) -> Option<AdpG3NetworkStatusEvent> {
         let mut pan_id:Option<u16> = None;

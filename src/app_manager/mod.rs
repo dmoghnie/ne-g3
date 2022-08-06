@@ -11,9 +11,11 @@ use std::time::SystemTime;
 
 use flume;
 use flume::SendError;
+use serialport::new;
 
 use crate::adp;
 
+use crate::adp::TAdpPanDescriptor;
 use crate::adp::TExtendedAddress;
 use crate::app_config;
 use crate::app_manager::ready::Ready;
@@ -28,8 +30,11 @@ use crate::usi;
 use self::get_params::GetParams;
 use self::idle::Idle;
 use self::join_network::JoinNetwork;
+use self::join_network_timeout::JoinNetworkTimeout;
+use self::network_discover_failed::NetworkDiscoverFailed;
 use self::set_coord_short_addr::SetCoordShortAddr;
 use self::start_network::StartNetwork;
+use self::discover_network::DiscoverNetwork;
 
 mod stack_initialize;
 mod ready;
@@ -39,6 +44,9 @@ mod idle;
 mod get_params;
 mod start_network;
 mod set_coord_short_addr;
+mod join_network_timeout;
+mod discover_network;
+mod network_discover_failed;
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
 pub enum State {
@@ -50,6 +58,9 @@ pub enum State {
     JoinNetwork,
     StartNetwork,
     Ready,
+    JoinNetworkTimeout,
+    DiscoverNetwork,
+    NetworkDiscoverFailed,
 }
 #[derive(Debug)]
 pub enum Message<'a> {
@@ -175,7 +186,8 @@ where
 pub struct Context {
     is_coordinator: bool,
     extended_addr: Option<TExtendedAddress>,
-    settings: app_config::Settings
+    settings: app_config::Settings,
+    pan_descriptor: Option<TAdpPanDescriptor>
    
 }
 
@@ -204,7 +216,10 @@ impl AppManager {
         state_machine.add_state(State::JoinNetwork, Box::new(JoinNetwork::new()));
         state_machine.add_state(State::StartNetwork, Box::new(StartNetwork::new()));
         state_machine.add_state(State::Ready, Box::new(Ready::new()));
+        state_machine.add_state(State::JoinNetworkTimeout, Box::new(JoinNetworkTimeout {}));
+        state_machine.add_state(State::DiscoverNetwork, Box::new(DiscoverNetwork {}));
         state_machine.add_state(State::SetCoordShortAddr, Box::new(SetCoordShortAddr {}));
+        state_machine.add_state(State::NetworkDiscoverFailed, Box::new(NetworkDiscoverFailed {}));
     }
     pub fn start(self, settings: &app_config::Settings,  usi_receiver: flume::Receiver<usi::Message>, is_coordinator: bool) {
         log::info!("App Manager started ...");
@@ -214,7 +229,7 @@ impl AppManager {
                 StateMachine::<State, usi::Message, flume::Sender<usi::Message>, Context>::new(
                     State::Idle,
                     self.usi_tx.clone(),
-                    Context { is_coordinator: is_coordinator, extended_addr: None, settings: settings }
+                    Context { is_coordinator: is_coordinator, extended_addr: None, settings: settings, pan_descriptor: None }
                 );
             // let mut lbp_manager = lbp_manager::LbpManager::new();
             Self::init_states(&mut state_machine);

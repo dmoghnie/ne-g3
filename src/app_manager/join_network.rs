@@ -22,13 +22,19 @@ impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for Joi
     ) -> Response<State> {
         log::info!("State : JoinNetwork - onEnter : context {:?}", context);
 
-        let cmd = request::AdpJoinNetworkRequest {
-            pan_id: context.settings.g3.pan_id,
-            lba_address: 0,
-        };
-        if let Err(e) = cs.send(usi::Message::UsiOut(cmd.into())) {
-            log::warn!("Failed to send network join request {}", e);
+        if let Some(ref pan_descriptor) = context.pan_descriptor {
+            let cmd = request::AdpJoinNetworkRequest {
+                pan_id: pan_descriptor.pan_id,
+                lba_address: pan_descriptor.lba_address
+            };
+            if let Err(e) = cs.send(usi::Message::UsiOut(cmd.into())) {
+                log::warn!("Failed to send network join request {}", e);
+            }
+    
         }
+        else{
+            log::error!("Trying to join network without pan descriptor");
+        } //TODO handle when no pan descriptor
         Response::Handled
     }
 
@@ -47,6 +53,9 @@ impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for Joi
                             // let request = request::AdpMacSetRequest::new(EMacWrpPibAttribute::MAC_WRP_PIB_SHORT_ADDRESS, 0, &v);
                             // cs.send(usi::Message::UsiOut(request.into()));
                             return Response::Transition(State::Idle);
+                        }
+                        else if (response.status == EAdpStatus::G3_TIMEOUT) {
+                            return Response::Transition(State::JoinNetworkTimeout);
                         }
                     }
                     _ => {}

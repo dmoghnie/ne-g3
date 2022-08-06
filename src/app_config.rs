@@ -237,7 +237,8 @@ pub struct G3 {
     pub context_information_table_1: Vec<u8>,
     pub ids_arib: Vec<u8>,
     pub ids_cenelec_fcc: Vec<u8>,
-    pub max_hops: u8
+    pub max_hops: u8,
+    pub discovery_timeout_secs: u8
 }
 
 #[derive(Debug, Deserialize, Clone)]

@@ -38,8 +38,8 @@ pub struct AdpDiscoveryRequest {
     duration:u8 //maybe we should have durations in a more rusty way, then we convert to u8
 }
 impl AdpDiscoveryRequest {
-    pub fn new (duration: u8) -> Self {
-        AdpDiscoveryRequest { duration}
+    pub fn new (duration_secs: u8) -> Self {
+        AdpDiscoveryRequest { duration: duration_secs}
     }
 }
 impl Into<usi::OutMessage> for AdpDiscoveryRequest {
