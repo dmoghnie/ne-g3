@@ -30,7 +30,7 @@ use crate::usi;
 use self::get_params::GetParams;
 use self::idle::Idle;
 use self::join_network::JoinNetwork;
-use self::join_network_timeout::JoinNetworkTimeout;
+use self::join_network_failed::JoinNetworkFailed;
 use self::network_discover_failed::NetworkDiscoverFailed;
 use self::set_coord_short_addr::SetCoordShortAddr;
 use self::start_network::StartNetwork;
@@ -44,7 +44,7 @@ mod idle;
 mod get_params;
 mod start_network;
 mod set_coord_short_addr;
-mod join_network_timeout;
+mod join_network_failed;
 mod discover_network;
 mod network_discover_failed;
 
@@ -58,7 +58,7 @@ pub enum State {
     JoinNetwork,
     StartNetwork,
     Ready,
-    JoinNetworkTimeout,
+    JoinNetworkFailed,
     DiscoverNetwork,
     NetworkDiscoverFailed,
 }
@@ -187,7 +187,7 @@ pub struct Context {
     is_coordinator: bool,
     extended_addr: Option<TExtendedAddress>,
     settings: app_config::Settings,
-    pan_descriptor: Option<TAdpPanDescriptor>
+    pan_descriptors: Vec<TAdpPanDescriptor>
    
 }
 
@@ -216,7 +216,7 @@ impl AppManager {
         state_machine.add_state(State::JoinNetwork, Box::new(JoinNetwork::new()));
         state_machine.add_state(State::StartNetwork, Box::new(StartNetwork::new()));
         state_machine.add_state(State::Ready, Box::new(Ready::new()));
-        state_machine.add_state(State::JoinNetworkTimeout, Box::new(JoinNetworkTimeout {}));
+        state_machine.add_state(State::JoinNetworkFailed, Box::new(JoinNetworkFailed {}));
         state_machine.add_state(State::DiscoverNetwork, Box::new(DiscoverNetwork {}));
         state_machine.add_state(State::SetCoordShortAddr, Box::new(SetCoordShortAddr {}));
         state_machine.add_state(State::NetworkDiscoverFailed, Box::new(NetworkDiscoverFailed {}));
@@ -229,7 +229,8 @@ impl AppManager {
                 StateMachine::<State, usi::Message, flume::Sender<usi::Message>, Context>::new(
                     State::Idle,
                     self.usi_tx.clone(),
-                    Context { is_coordinator: is_coordinator, extended_addr: None, settings: settings, pan_descriptor: None }
+                    Context { is_coordinator: is_coordinator, extended_addr: None, 
+                        settings: settings, pan_descriptors: Vec::new() }
                 );
             // let mut lbp_manager = lbp_manager::LbpManager::new();
             Self::init_states(&mut state_machine);

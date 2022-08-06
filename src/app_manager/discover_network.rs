@@ -26,12 +26,12 @@ impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for Dis
                             Response::Transition(State::NetworkDiscoverFailed)
                         }
                         else {
-                            Response::Handled
+                            Response::Transition(State::JoinNetwork)
                         }
                     }
                     adp::Message::AdpG3DiscoveryEvent(event) => {
-                        context.pan_descriptor = Some(event.pan_descriptor.clone());
-                        Response::Transition(State::JoinNetwork)
+                        context.pan_descriptors.push(event.pan_descriptor.clone());
+                        Response::Handled
                     }
                     _=>{
                         Response::Handled

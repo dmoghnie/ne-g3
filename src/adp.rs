@@ -980,6 +980,13 @@ impl AdpG3NetworkJoinResponse {
                     pan_id,
                 });
             }
+            else {
+                return Some(AdpG3NetworkJoinResponse {
+                    status: EAdpStatus::G3_ERROR_INTERNAL,
+                    network_addr: 0,
+                    pan_id: 0
+                });
+            }
         }
         None
     }

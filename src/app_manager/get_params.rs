@@ -38,35 +38,35 @@ impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for Get
             Message::Adp(adp_msg) => {
                 match adp_msg {
                     adp::Message::AdpG3GetMacResponse(mac_get_response) => {
-                            if let Ok(attr) = EMacWrpPibAttribute::try_from(mac_get_response.attribute_id) {
-                                match attr {
-                                    EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_EXTENDED_ADDRESS => {
-                                       let mut v = mac_get_response.attribute_val.clone();
-                                       v.reverse();
-                                        context.extended_addr = 
-                                            TExtendedAddress::try_from(v.as_slice()).map_or(None, |v| Some(v));
-                                       if let Some(ipv6_addr) = 
-                                        app_config::ula_ipv6_addr_from_pan_id_extended_addr(&context.settings.network.ula_net_prefix,
-                                            context.settings.g3.pan_id, &context.extended_addr.unwrap()) {
+                            // if let Ok(attr) = EMacWrpPibAttribute::try_from(mac_get_response.attribute_id) {
+                            //     match attr {
+                            //         EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_EXTENDED_ADDRESS => {
+                            //            let mut v = mac_get_response.attribute_val.clone();
+                            //            v.reverse();
+                            //             context.extended_addr = 
+                            //                 TExtendedAddress::try_from(v.as_slice()).map_or(None, |v| Some(v));
+                            //            if let Some(ipv6_addr) = 
+                            //             app_config::ula_ipv6_addr_from_pan_id_extended_addr(&context.settings.network.ula_net_prefix,
+                            //                 context.settings.g3.pan_id, &context.extended_addr.unwrap()) {
                                         
-                                        log::info!("Setting ipv6 network prefix");
-                                        let v6prefix = ipv6_prefix::new(context.settings.network.ula_net_prefix_len, &ipv6_addr);
-                                        // AdpSetRequestSync(ADP_IB_PREFIX_TABLE,0,sizeof(struct ipv6_prefix),(uint8_t*)&net_prefix, &pSetConfirm);
-                                        unsafe {
-                                            let v = v6prefix.to_raw_data().to_vec();
-                                            let request = AdpSetRequest::new (adp::EAdpPibAttribute::ADP_IB_PREFIX_TABLE, 0, &v);
-                                            cs.send(usi::Message::UsiOut(request.into()));
-                                        }
-                                       }
-                                    },
-                                    _ => {}
-                                }
-                            }
+                            //             log::info!("Setting ipv6 network prefix");
+                            //             let v6prefix = ipv6_prefix::new(context.settings.network.ula_net_prefix_len, &ipv6_addr);
+                            //             // AdpSetRequestSync(ADP_IB_PREFIX_TABLE,0,sizeof(struct ipv6_prefix),(uint8_t*)&net_prefix, &pSetConfirm);
+                            //             unsafe {
+                            //                 let v = v6prefix.to_raw_data().to_vec();
+                            //                 let request = AdpSetRequest::new (adp::EAdpPibAttribute::ADP_IB_PREFIX_TABLE, 0, &v);
+                            //                 cs.send(usi::Message::UsiOut(request.into()));
+                            //             }
+                            //            }
+                            //         },
+                            //         _ => {}
+                            //     }
+                            // }
                         if context.is_coordinator {
                             return Response::Transition(State::StartNetwork);
                         }
                         else{
-                            return Response::Transition(State::DiscoverNetwork);
+                            return Response::Transition(State::JoinNetwork);
                         }
                     }
                     _ => {

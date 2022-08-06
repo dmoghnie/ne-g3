@@ -3,10 +3,10 @@ use crate::{usi, request::AdpSetRequest, adp::{EAdpPibAttribute, self}};
 use super::{Stateful, State, Context, Response, Message};
 
 
-pub struct JoinNetworkTimeout {}
-impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for JoinNetworkTimeout {
+pub struct JoinNetworkFailed {}
+impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for JoinNetworkFailed {
     fn on_enter(&mut self, cs: &flume::Sender<usi::Message>, context: &mut Context) -> Response<State> {
-
+        
         Response::Handled
     }
 
