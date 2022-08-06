@@ -21,27 +21,20 @@ impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for Joi
         context: &mut Context,
     ) -> Response<State> {
         log::info!("State : JoinNetwork - onEnter : context {:?}", context);
-        let cmd = request::AdpJoinNetworkRequest {
-            pan_id: context.settings.g3.pan_id,
-            lba_address: 0
-        };
-        if let Err(e) = cs.send(usi::Message::UsiOut(cmd.into())) {
-            log::warn!("Failed to send network join request {}", e);
-        }
         
-        // if let Some(ref pan_descriptor) = context.pan_descriptors.pop() {
-        //     let cmd = request::AdpJoinNetworkRequest {
-        //         pan_id: context.settings.g3.pan_id,
-        //         lba_address: 0
-        //     };
-        //     if let Err(e) = cs.send(usi::Message::UsiOut(cmd.into())) {
-        //         log::warn!("Failed to send network join request {}", e);
-        //     }
+        if let Some(ref pan_descriptor) = context.pan_descriptors.pop() {
+            let cmd = request::AdpJoinNetworkRequest {
+                pan_id: pan_descriptor.pan_id,
+                lba_address: pan_descriptor.lba_address
+            };
+            if let Err(e) = cs.send(usi::Message::UsiOut(cmd.into())) {
+                log::warn!("Failed to send network join request {}", e);
+            }
     
-        // }
-        // else{
-        //     log::error!("Trying to join network without pan descriptor");
-        // } //TODO handle when no pan descriptor
+        }
+        else{
+            log::error!("Trying to join network without pan descriptor");
+        } //TODO handle when no pan descriptor
         Response::Handled
     }
 

@@ -147,12 +147,12 @@ impl SetParams {
                     0,
                     vec![0xB4, 0x00],
                 ),
-                (
-                    G3ParamType::Adp,
-                    adp::EAdpPibAttribute::ADP_IB_COORD_SHORT_ADDRESS.into(),
-                    0,
-                    vec![0x00, 0x01],
-                ),
+                // (
+                //     G3ParamType::Adp,
+                //     adp::EAdpPibAttribute::ADP_IB_COORD_SHORT_ADDRESS.into(),
+                //     0,
+                //     vec![0x00, 0x01],
+                // ),
             ];
             self.params = Some(params.into());
         }
