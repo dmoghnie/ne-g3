@@ -61,43 +61,22 @@ enum TunPayload {
     Error(()), //TODO
 }
 
-#[derive(Debug)]
-struct TunMessage {
-    short_addr: u16,
-    payload: TunPayload,
-}
 
-impl TunMessage {
-    pub fn new(short_addr: u16, payload: TunPayload) -> Self {
-        TunMessage {
-            short_addr,
-            payload,
-        }
-    }
-    pub fn get_payload(self) -> TunPayload {
-        self.payload
-    }
-    pub fn get_short_addr(self) -> u16 {
-        self.short_addr
-    }
-}
-
-struct TunDevice {
-    short_addr: u16,
-    listener: flume::Sender<TunMessage>,
+struct TunDevice {    
+    listener: flume::Sender<TunPayload>,
 }
 
 impl TunDevice {
-    pub fn new(short_addr: u16, listener: flume::Sender<TunMessage>) -> Self {
-        TunDevice {
-            short_addr,
+    pub fn new(listener: flume::Sender<TunPayload>) -> Self {
+        TunDevice {           
             listener,
         }
     }
 
 
     
-    pub fn start(self, buffers_available: Arc<AtomicBool>, settings: &app_config::Settings, short_addr: u16, mut rx: flume::Receiver<TunMessage>, extended_addr: &Option<TExtendedAddress>) {
+    pub fn start(self, buffers_available: Arc<AtomicBool>, settings: &app_config::Settings, short_addr: u16, 
+        mut rx: flume::Receiver<TunPayload>, extended_addr: &Option<TExtendedAddress>) {
         use std::{thread::sleep, time::Duration, io::Read, io::Write};
 
 
@@ -184,10 +163,8 @@ impl TunDevice {
                                     // log::info!("Tun message fragmented into {} packets ", pkts.len());
                                     // for pkt in pkts{
                                         
-                                        match self.listener.send(TunMessage::new(
-                                            self.short_addr,
-                                            TunPayload::Data(buf[skip..size].to_vec()),
-                                        )) {
+                                        match self.listener.send(
+                                            TunPayload::Data(buf[skip..size].to_vec())) {
                                             Ok(_) => {}
                                             Err(e) => {
                                                 log::warn!(
@@ -214,7 +191,7 @@ impl TunDevice {
             loop {
                 match rx.recv() {
                     Ok(tun_msg) => {
-                        match tun_msg.get_payload() {
+                        match tun_msg {
                             TunPayload::Data(data) => {
                                 log::debug!("TUN interface sending Packet {:?}", data);
                                 match iface_writer.send(&data) {
@@ -243,9 +220,9 @@ impl TunDevice {
 }
 
 pub struct NetworkManager {    
-    cmd_tx: flume::Sender<usi::Message>,
-    tun_devices: HashMap<u16, flume::Sender<TunMessage>>,
-    buffers_available: Arc<AtomicBool>
+    cmd_tx: flume::Sender<usi::Message>,    
+    buffers_available: Arc<AtomicBool>,
+    tun_tx: Option<flume::Sender<TunPayload>>
 }
 /*
 By design, the G3-PLC protocol stack allows native support of the IPv6 protocol, which grants end-user flexibility to fulfil business requirements when choosing the appropriate higher layers (ISO/OSI transport and application layers). This key feature also secures G3-PLC infrastructures in the long term, thanks to the scalability and future application compatibility provided by IPv6.
@@ -266,8 +243,8 @@ impl <'a> NetworkManager {
     pub fn new(settings: &'a app_config::Settings, cmd_tx: flume::Sender<usi::Message>) -> Self {
         NetworkManager { 
             buffers_available: Arc::new(AtomicBool::new(true)),           
-            cmd_tx: cmd_tx,
-            tun_devices: HashMap::new(),
+            cmd_tx: cmd_tx,                        
+            tun_tx: None
         }
     }
     pub fn ipv6_is_unicast_link_local(addr: &Ipv6Addr) -> bool {
@@ -342,7 +319,7 @@ impl <'a> NetworkManager {
 
 
     pub fn start(mut self, settings: &'a app_config::Settings, mut rx: flume::Receiver<adp::Message>) {
-        let (tun_tx, mut tun_rx) = flume::unbounded::<TunMessage>();
+        let (tun_tx, mut tun_rx) = flume::unbounded::<TunPayload>();
         log::info!("network manager starting ...");
 
         let mut extended_addr :Option<TExtendedAddress> =  None;
@@ -365,12 +342,9 @@ impl <'a> NetworkManager {
                                 if let Some((payload, short_addr)) =
                                     Self::ipv6_to_tun_payload_and_short_addr(&g3_data.nsdu)
                                 {
-                                    if let Some(tx) = self.tun_devices.get(&short_addr) {
-                                        log::info!("found sender for short addr {} -- sending TunPayload::Data", short_addr);
-                                        match tx.send(TunMessage {
-                                            short_addr: short_addr,
-                                            payload: payload,
-                                        }) {
+                                    if let Some(ref tx) = self.tun_tx {
+                                       
+                                        match tx.send(payload) {
                                             Ok(_) => {}
                                             Err(e) => {
                                                 log::warn!(
@@ -382,34 +356,42 @@ impl <'a> NetworkManager {
                                     }
                                 }
                             }
-                            adp::Message::AdpG3GetMacResponse(response) => {
-                                if let Ok(attr) = adp::EMacWrpPibAttribute::try_from(response.attribute_id) {
+                            adp::Message::AdpG3GetResponse(response) =>{
+                                if let Ok(attr) = adp::EAdpPibAttribute::try_from(response.attribute_id) {
                                     match attr {
-                                        adp::EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_EXTENDED_ADDRESS => {
-                                            let mut v = response.attribute_val.clone();
-                                            v.reverse();
-                                            extended_addr = 
-                                                TExtendedAddress::try_from(v.as_slice()).map_or(None, |v| Some(v));
-                                        },
-                                        _ => {}
+                                        adp::EAdpPibAttribute::ADP_IB_COORD_SHORT_ADDRESS => {
+                                            let v = response.attribute_val;
+                                            if v.len() == 2 {
+                                                let coord_short_addr = u16::from_be_bytes([v[0], v[1]]);
+                                                let tun_device = TunDevice::new (tun_tx.clone());
+                                                let (tx, mut rx) = flume::unbounded::<TunPayload>();
+                                                self.tun_tx = Some(tx);
+                                                
+                                                tun_device.start(self.buffers_available.clone(), &settings, 
+                                                    coord_short_addr, rx, &extended_addr);
+                                            }
+                                        }
+                                        _ => {
+
+                                        }
                                     }
-                                }
+                                }                                
                             }
+                        
                             adp::Message::AdpG3NetworkStartResponse(network_start_response) => {
                                 if network_start_response.status == EAdpStatus::G3_SUCCESS {
-                                    let short_addr = 0u16; //TODO, get the actual address from configuration
-                                    log::info!("received network start response, starting interface for address {}", short_addr);
-                                    if self.tun_devices.contains_key(&short_addr) {
+                                    
+                                    log::info!("received network start response, starting interface for address ");
+                                    if self.tun_tx.is_some() {
                                         log::warn!(
                                             "Received network start for device already started"
                                         );
                                     } else {
-                                        let tun_device = TunDevice::new(short_addr, tun_tx.clone());
-                                        let (tx, mut rx) = flume::unbounded::<TunMessage>();
-                                        self.tun_devices.insert(short_addr, tx);
-
-                                        
-                                        tun_device.start(self.buffers_available.clone(), &settings, short_addr, rx, &extended_addr);
+                                        let request = request::AdpGetRequest::new (adp::EAdpPibAttribute::ADP_IB_COORD_SHORT_ADDRESS, 0);
+                                        match self.cmd_tx.send(usi::Message::UsiOut(request.into())) {
+                                            Ok(_) => {log::info!("Send to usi ")},
+                                            Err(e) => {log::warn!("Failed to send to usi {}", e)},
+                                        }
                                     }
                                 }
                                 else{
@@ -418,17 +400,13 @@ impl <'a> NetworkManager {
                             }
                             adp::Message::AdpG3NetworkJoinResponse(network_join_response) => {
                                 if network_join_response.status == EAdpStatus::G3_SUCCESS {
+                                    
                                     let short_addr = network_join_response.network_addr;
-                                    if self
-                                        .tun_devices
-                                        .contains_key(&network_join_response.network_addr)
-                                    {
-                                        log::warn!("Received network join response for address : {}, while device already in list", short_addr);
+                                    if self.tun_tx.is_some() {
+                                        log::warn!("Received network join response for address : {}, while device already starterd", short_addr);
                                     } else {
-                                        let tun_device = TunDevice::new(short_addr, tun_tx.clone());
-                                        let (tx, mut rx) = flume::unbounded::<TunMessage>();
-                                        self.tun_devices.insert(short_addr, tx);
-
+                                        let tun_device = TunDevice::new(tun_tx.clone());
+                                        let (tx, mut rx) = flume::unbounded::<TunPayload>();
                                         tun_device.start(self.buffers_available.clone(),&settings, short_addr, rx, &extended_addr);
                                     }
                                 }
@@ -475,31 +453,9 @@ impl <'a> NetworkManager {
                  if self.buffers_available.load(Ordering::SeqCst) {
                     match tun_rx.try_recv() {
                         Ok(msg) => {
-                            match msg.payload {
+                            match msg {
                                 TunPayload::Data(pkt) => {
-                                    // log::info!("send {} bytes to G3", pkt.len());
 
-                                    // if let Some(ipv6) = Ipv6Packet::new (&pkt) {
-                                    //     log::info!("Packet {:?}", ipv6);
-                                    //     let dst_addr = ipv6.get_destination();
-                                    //     if !Self::ipv6_is_unicast_link_local(&dst_addr) {
-                                    //         let short_addr = dst_addr.segments()[7];
-                                    //         // if let Some(short_addr) = lbp_manager.get_short_addr_from_ipv6_addr(dst_addr) {                                                
-                                    //         //     let v = short_addr.to_le_bytes().to_vec();
-                                    //         //     log::info!("Setting short addr for packet destination {} : {}", dst_addr, short_addr);
-                                    //         //     current_out_msg = Some(pkt);
-                                    //         //     let request = AdpSetRequest::new(EAdpPibAttribute::ADP_IB_MANUF_IPV6_ULA_DEST_SHORT_ADDRESS, 0, &v);
-                                    //         //     self.cmd_tx.send(usi::Message::UsiOut(request.into()));
-                                    //         // }               
-                                    //         let v = short_addr.to_le_bytes().to_vec();
-                                    //         log::info!("Setting short addr for packet destination {} : {} : {:?}", dst_addr, short_addr, v);
-                                    //         current_out_msg = Some(pkt);
-                                    //         let request = AdpSetRequest::new(EAdpPibAttribute::ADP_IB_MANUF_IPV6_ULA_DEST_SHORT_ADDRESS, 0, &v);
-                                    //         self.cmd_tx.send(usi::Message::UsiOut(request.into()));                             
-                                    //     }
-                                    //     else{
-// ipv6.set_src_addr(Self::ipv6_from_short_addr(*app_config::PAN_ID, msg.short_addr).into());
-                                    //  log::info!("ipv6 pkt : {:?}", pkt);
                                     let data_request = AdpDataRequest::new(
                                         rand::thread_rng().gen(),
                                         &pkt,

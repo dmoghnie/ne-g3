@@ -66,7 +66,7 @@ impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for Get
                             return Response::Transition(State::StartNetwork);
                         }
                         else{
-                            return Response::Transition(State::JoinNetwork);
+                            return Response::Transition(State::DiscoverNetwork);
                         }
                     }
                     _ => {
