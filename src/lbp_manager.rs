@@ -41,6 +41,8 @@ enum DeviceState {
     BS_STATE_SENT_EAP_MSG_DECLINED,
 }
 
+const MAX_DEVICES:u16 = 500u16;
+
 #[derive(Debug)]
 pub struct DeviceSlot {
     state: DeviceState,
@@ -98,6 +100,7 @@ struct DeviceManager {
     short_addresses: HashMap<u16, DeviceSlotRef>,
     // ip_addresses: HashMap<IpAddr, DeviceSlotRef>,
     initial_short_address: u16,
+    current_short_address: u16
 }
 impl DeviceManager {
     fn new() -> Self {
@@ -105,33 +108,36 @@ impl DeviceManager {
             devices: HashMap::new(),
             short_addresses: HashMap::new(),
             // ip_addresses: HashMap::new(),
-            initial_short_address: 1,
+            initial_short_address: 0,
+            current_short_address: 0
         }
     }
+    fn set_initial_short_address (&mut self, initial_short_address: u16) {
+        self.initial_short_address = initial_short_address;
+    }
+    
    
-    fn short_addr_from_ip_address(ip_addr: &IpAddr) -> Option<u16> {
-        match ip_addr {
-            IpAddr::V4(ip) => {
-                let octets = ip.octets();
-                Some(u16::from_be_bytes([octets[3], octets[4]]))                
-            },
-            IpAddr::V6(_) => None,
-        }
-    }
-    fn get_device_by_short_addr(&self, short_addr: u16) -> Option<&DeviceSlotRef> {
-        self.short_addresses.get(&short_addr)
-    }
+    // fn short_addr_from_ip_address(ip_addr: &IpAddr) -> Option<u16> {
+    //     match ip_addr {
+    //         IpAddr::V4(ip) => {
+    //             let octets = ip.octets();
+    //             Some(u16::from_be_bytes([octets[3], octets[4]]))                
+    //         },
+    //         IpAddr::V6(_) => None,
+    //     }
+    // }
+    // fn get_device_by_short_addr(&self, short_addr: u16) -> Option<&DeviceSlotRef> {
+    //     self.short_addresses.get(&short_addr)
+    // }
     fn get_device_by_addr(&self, addr: &TExtendedAddress) -> Option<&DeviceSlotRef> {
         self.devices.get(addr)
     }
     // fn get_device_by_ip(&self, ip: &IpAddr) -> Option<&DeviceSlotRef> {
     //     self.ip_addresses.get(&ip)
     // }
-    fn next_short_address(&self) -> u16 {
-        let mut short_addr = self.initial_short_address;
-        while self.short_addresses.contains_key(&short_addr) {
-            short_addr += 1;
-        }        
+    fn next_short_address(&mut self) -> u16 {
+        let short_addr = MAX_DEVICES * self.initial_short_address + (self.current_short_address) + 1; 
+        self.current_short_address = short_addr;
         short_addr
     }
     fn add_or_get_by_addr(&mut self, addr: &TExtendedAddress) -> &DeviceSlotRef {
@@ -139,7 +145,6 @@ impl DeviceManager {
         self.devices
             .entry(*addr)
             .or_insert_with(|| {
-                self.initial_short_address = short_addr;
                 
                 let d = Rc::new(RefCell::new(DeviceSlot::new (*addr, short_addr)));
                 self.short_addresses.insert(short_addr, d.clone());
@@ -194,6 +199,9 @@ impl LbpManager {
             psk: TEapPskKey(g3_config.psk),
             max_hops: g3_config.max_hops
         }
+    }
+    pub fn set_short_addr (&mut self, short_addr: u16) {
+        self.device_manager.set_initial_short_address(short_addr);
     }
 
     fn process_joining_eap_t1(gmk: &Vec<u8>, rekey_gmk: &Vec<u8>,
@@ -633,14 +641,14 @@ impl LbpManager {
     //     }
     // }
 
-    pub fn get_short_addr_from_ipv6_addr (&self, ipv6_addr: Ipv6Addr) -> Option<u16> {
-        if let Ok(extended_addr) = ipv6_addr.try_into() {
-            self.device_manager.get_device_by_addr(&extended_addr).map_or(None, |ds| {
-                Some(ds.deref().borrow().us_assigned_short_address)
-            })
-        }
-        else{
-            None
-        }
-    }
+    // pub fn get_short_addr_from_ipv6_addr (&self, ipv6_addr: Ipv6Addr) -> Option<u16> {
+    //     if let Ok(extended_addr) = ipv6_addr.try_into() {
+    //         self.device_manager.get_device_by_addr(&extended_addr).map_or(None, |ds| {
+    //             Some(ds.deref().borrow().us_assigned_short_address)
+    //         })
+    //     }
+    //     else{
+    //         None
+    //     }
+    // }
 }

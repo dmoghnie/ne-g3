@@ -365,6 +365,7 @@ impl <'a> NetworkManager {
                                                 let coord_short_addr = u16::from_be_bytes([v[0], v[1]]);
                                                 let tun_device = TunDevice::new (tun_tx.clone());
                                                 let (tx, mut rx) = flume::unbounded::<TunPayload>();
+                                                lbp_manager.set_short_addr(coord_short_addr);
                                                 self.tun_tx = Some(tx);
                                                 
                                                 tun_device.start(self.buffers_available.clone(), &settings, 
