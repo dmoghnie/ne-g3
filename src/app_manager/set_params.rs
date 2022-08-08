@@ -86,14 +86,14 @@ impl SetParams {
                     G3ParamType::Adp,
                     adp::EAdpPibAttribute::ADP_IB_COORD_SHORT_ADDRESS.into(),
                     0,
-                    vec![0x00, 0x01],
+                    vec![0x00, 0x00],
                 ),
                 //TODO parameterize
                 (
                     G3ParamType::Mac,
                     adp::EMacWrpPibAttribute::MAC_WRP_PIB_SHORT_ADDRESS.into(),
                     0,
-                    vec![0x00, 0x01],
+                    vec![0x00, 0x00],
                 ),
             ];
             self.params = Some(params.into());
