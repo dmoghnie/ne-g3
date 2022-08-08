@@ -408,6 +408,7 @@ impl <'a> NetworkManager {
                                     } else {
                                         let tun_device = TunDevice::new(tun_tx.clone());
                                         let (tx, mut rx) = flume::unbounded::<TunPayload>();
+                                        self.tun_tx = Some(tx);
                                         tun_device.start(self.buffers_available.clone(),&settings, short_addr, rx, &extended_addr);
                                     }
                                 }
