@@ -162,7 +162,7 @@ impl TunDevice {
                                     // let pkts = ipv6_frag_manager::fragment_packet(packet, 1280);
                                     // log::info!("Tun message fragmented into {} packets ", pkts.len());
                                     // for pkt in pkts{
-                                        
+                                        log::trace!("--> tun {:?}", buf);
                                         match self.listener.send(
                                             TunPayload::Data(buf[skip..size].to_vec())) {
                                             Ok(_) => {}
