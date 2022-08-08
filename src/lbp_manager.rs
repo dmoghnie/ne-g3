@@ -135,9 +135,8 @@ impl DeviceManager {
     // fn get_device_by_ip(&self, ip: &IpAddr) -> Option<&DeviceSlotRef> {
     //     self.ip_addresses.get(&ip)
     // }
-    fn next_short_address(&mut self) -> u16 {
-        let short_addr = MAX_DEVICES * self.initial_short_address + (self.current_short_address) + 1; 
-        self.current_short_address = short_addr;
+    fn next_short_address(&self) -> u16 {
+        let short_addr = MAX_DEVICES * self.initial_short_address + (self.current_short_address) + 1;        
         short_addr
     }
     fn add_or_get_by_addr(&mut self, addr: &TExtendedAddress) -> &DeviceSlotRef {
@@ -145,7 +144,7 @@ impl DeviceManager {
         self.devices
             .entry(*addr)
             .or_insert_with(|| {
-                
+                self.current_short_address = short_addr;
                 let d = Rc::new(RefCell::new(DeviceSlot::new (*addr, short_addr)));
                 self.short_addresses.insert(short_addr, d.clone());
                 return d;
