@@ -3,6 +3,9 @@
 _ne-g3_ is a standalone, [G3 PLC](https://www.itu.int/rec/T-REC-G.9903) coordinator and modem implementation
 for the Microchip G3 Stack.
 
+This application is in alpha, not ready for production use. 
+More work needs to be done on the device registration database.
+
 
 ## Features
 - Runs in coordinator or device mode.
