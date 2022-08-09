@@ -356,6 +356,12 @@ impl <'a> NetworkManager {
                                     }
                                 }
                             }
+                            // The reason why we don't just use the configured coord address.
+                            // Our requirements dictate that a node can switch from device mode to coord mode (distributed model which will be developed later)
+                            // as part of peer to peer, self healing network.
+                            // Obviously a lot of work has to be done in coordinating the multiple device/coordinators operating in concert 
+                            // (not sure if this is possible in the current G3 PLC standard or a limitation in Microship's stack implementation).
+                            // more layers for distributed database has to be added.
                             adp::Message::AdpG3GetResponse(response) =>{
                                 if let Ok(attr) = adp::EAdpPibAttribute::try_from(response.attribute_id) {
                                     match attr {
