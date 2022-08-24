@@ -136,6 +136,8 @@ impl TunDevice {
     }
     }   
 
+
+        //TODO new linux distributions don't have ifconfig. install net-tools or fix by using ip command
         cmd("ifconfig", "ifconfig", &[tun_interface.name(), "mtu", "1280"]);
         let iface = Arc::new(tun_interface);
         let iface_writer = iface.clone();
