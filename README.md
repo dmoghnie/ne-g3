@@ -29,7 +29,11 @@ The application creates a [TUN](https://www.kernel.org/doc/html/latest/networkin
 ### Configuration
 By default, the application uses ne-g3.toml for configuring various aspects for the G3 Stack and IPv6 network, this can be overriden by -c command line option.
 
-The application will configure the interface with two IPv6 addresses. One is the mandatory link local (LL), the other is Unique Local Address (ULA).
+The application will configure the interface with two IPv6 addresses. One is the mandatory link local (LL) and Unique Local Address (ULA).
+
+#### Linux
+- Need to install pkg-config
+- On newwer linux distros, ifconfig is missing. We need ifconfig to configure the network interface. To get ifconfig back, install net-tools.
 ## License
 
 _ne-g3_ is primarily distributed under the terms of both the MIT license and the Apache License (Version 2.0).
