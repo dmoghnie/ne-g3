@@ -141,7 +141,7 @@ where
                 Response::Handled => {}
                 Response::Transition(s) => {
                     if s != self.current_state {
-                        st.on_exit(&mut &mut self.context);
+                        st.on_exit(&mut self.context);
                         self.current_state = s;
                         loop {
                             log::info!("StateMachine : {:?} - {:?}", self.current_state, event);
