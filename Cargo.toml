@@ -25,13 +25,15 @@ eax = "0.4.1"
 # eax = "*"
 cmac = "0.6.0"
 
-rand = "*"
-config = "*"
-serde = "*"
-serde_derive = "*"
-byteorder = "1.4.3"
+rand = "^0.8"
+config = "^0.13"
+serde = "^1.0"
+serde_derive = "^1.0"
+byteorder = "^1.4"
 
-nefsm ={ git = "https://github.com/dmoghnie/ne-fsm.git"}
+# nefsm ={ git = "https://github.com/dmoghnie/ne-fsm.git"}
+nefsm = {path = "../libs/ne-fsm/nefsm"}
+nefsm_macro = {path = "../libs/ne-fsm/macro"}
 
 # tun-tap = {path="../../libs/tuntap"}
 pnet_packet = "*"

@@ -1,6 +1,8 @@
+use nefsm::{Stateful, Response};
+
 use crate::{usi, app_config, request, adp::{EAdpStatus, self, EMacWrpPibAttribute}};
 
-use super::{State, Stateful, Context, Response, Message};
+use super::{State, Context, Message};
 
 pub struct JoinNetwork {
    
@@ -14,10 +16,9 @@ impl JoinNetwork {
     }
 }
 
-impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for JoinNetwork {
+impl Stateful<State, Context, Message<'_>> for JoinNetwork {
     fn on_enter(
         &mut self,
-        cs: &flume::Sender<usi::Message>,
         context: &mut Context,
     ) -> Response<State> {
         log::info!("State : JoinNetwork - onEnter : context {:?}", context);
@@ -27,7 +28,7 @@ impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for Joi
                 pan_id: pan_descriptor.pan_id,
                 lba_address: pan_descriptor.lba_address
             };
-            if let Err(e) = cs.send(usi::Message::UsiOut(cmd.into())) {
+            if let Err(e) = context.usi_tx.send(usi::Message::UsiOut(cmd.into())) {
                 log::warn!("Failed to send network join request {}", e);
             }
     
@@ -40,7 +41,6 @@ impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for Joi
 
     fn on_event(
         &mut self,
-        cs: &flume::Sender<usi::Message>,
         event: &Message,
         context: &mut Context,
     ) -> Response<State> {

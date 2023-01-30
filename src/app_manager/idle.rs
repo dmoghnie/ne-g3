@@ -1,16 +1,18 @@
+use nefsm::{Stateful, Response};
+
 use crate::{usi, request::AdpSetRequest, adp::{EAdpPibAttribute, self}};
 
-use super::{Stateful, State, Context, Response, Message};
+use super::{State, Context, Message};
 
 
 pub struct Idle {}
-impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for Idle {
-    fn on_enter(&mut self, cs: &flume::Sender<usi::Message>, context: &mut Context) -> Response<State> {
+impl Stateful<State, Context, Message<'_>> for Idle {
+    fn on_enter(&mut self, context: &mut Context) -> Response<State> {
 
         Response::Handled
     }
 
-    fn on_event(&mut self, cs: &flume::Sender<usi::Message>, event: &Message, context: &mut Context) -> Response<State> {
+    fn on_event(&mut self, event: &Message, context: &mut Context) -> Response<State> {
         log::info!("on event {:?}", event );
         match event {
             Message::Adp(event) => Response::Handled,

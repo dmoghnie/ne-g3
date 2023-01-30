@@ -1,6 +1,8 @@
+use nefsm::{Stateful, Response};
+
 use crate::{app_config, usi, request::{AdpSetRequest, AdpInitializeRequest, self}, app_manager::Idle, adp};
 
-use super::{Stateful, Response, State, Message, Context};
+use super::{State, Message, Context};
 
 pub struct Ready {
 
@@ -16,13 +18,13 @@ impl Ready {
     
 }
 
-impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for Ready {
-    fn on_enter(&mut self, cs: &flume::Sender<usi::Message>, context: &mut Context) -> Response<State> {
+impl Stateful<State, Context, Message<'_>> for Ready {
+    fn on_enter(&mut self, context: &mut Context) -> Response<State> {
         log::info!("State : Ready - onEnter");
         Response::Handled
     }
 
-    fn on_event(&mut self, cs: &flume::Sender<usi::Message>, event: &Message, context: &mut Context) -> Response<State> {
+    fn on_event(&mut self, event: &Message, context: &mut Context) -> Response<State> {
         log::trace!("Ready : {:?}", event);
         match event {
             Message::Adp(adp) => {
