@@ -31,6 +31,8 @@ serde = "*"
 serde_derive = "*"
 byteorder = "1.4.3"
 
+nefsm ={ git = "https://github.com/dmoghnie/ne-fsm.git"}
+
 # tun-tap = {path="../../libs/tuntap"}
 pnet_packet = "*"
 libc = "0.2"

@@ -49,6 +49,7 @@ mod discover_network;
 mod network_discover_failed;
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
+#[nefsm::fsm_trait(State, Context, Event)]
 pub enum State {
     Idle,
     SetCoordShortAddr,
@@ -71,20 +72,20 @@ pub enum Message<'a> {
 pub trait CommandSender<C> {
     fn send_cmd(&self, cmd: C) -> bool;
 }
-pub trait Stateful<S: Hash + PartialEq + Eq + Clone, C, CS: CommandSender<C>, CTX> {
-    fn on_enter(&mut self, cs: &CS, context: &mut CTX) -> Response<S>;
-    fn on_event(&mut self, cs: &CS, event: &Message, context: &mut CTX) -> Response<S>;
-    fn on_exit(&mut self, context: &mut CTX);
-}
+// pub trait Stateful<S: Hash + PartialEq + Eq + Clone, C, CS: CommandSender<C>, CTX> {
+//     fn on_enter(&mut self, cs: &CS, context: &mut CTX) -> Response<S>;
+//     fn on_event(&mut self, cs: &CS, event: &Message, context: &mut CTX) -> Response<S>;
+//     fn on_exit(&mut self, context: &mut CTX);
+// }
 
-pub enum Response<S> {
-    Handled,
-    Transition(S),
-}
-pub enum Error<S> {
-    Handled,
-    Transition(S),
-}
+// pub enum Response<S> {
+//     Handled,
+//     Transition(S),
+// }
+// pub enum Error<S> {
+//     Handled,
+//     Transition(S),
+// }
 // pub trait ResultExt<T, S> {
 //     fn or_transition(self, state: S) -> core::result::Result<T, Error<S>>;
 
@@ -110,76 +111,76 @@ pub enum Error<S> {
 //     }
 // }
 
-pub struct StateMachine<S: Hash + PartialEq + Eq + Clone, C, CS: CommandSender<C>, CTX> {
-    states: HashMap<S, Box<dyn Stateful<S, C, CS, CTX>>>,
-    current_state: S,
-    command_sender: CS,
-    context: CTX
-}
-impl<S: Hash + PartialEq + Eq + Clone, C, CS, CTX> StateMachine<S, C, CS, CTX>
-where
-    CS: CommandSender<C>, S: Debug, CTX: Sized
-{
-    pub fn new(initial_state: S, command_sender: CS, context: CTX) -> Self {
-        let mut states = HashMap::<S, Box<dyn Stateful<S, C, CS, CTX>>>::new();
-        Self {
-            states: states,
-            current_state: initial_state,
-            command_sender: command_sender,
-            context: context
-        }
-    }
-    pub fn add_state(&mut self, s: S, state: Box<dyn Stateful<S, C, CS, CTX>>) {
-        self.states.insert(s, state);
-    }
+// pub struct StateMachine<S: Hash + PartialEq + Eq + Clone, C, CS: CommandSender<C>, CTX> {
+//     states: HashMap<S, Box<dyn Stateful<S, C, CS, CTX>>>,
+//     current_state: S,
+//     command_sender: CS,
+//     context: CTX
+// }
+// impl<S: Hash + PartialEq + Eq + Clone, C, CS, CTX> StateMachine<S, C, CS, CTX>
+// where
+//     CS: CommandSender<C>, S: Debug, CTX: Sized
+// {
+//     pub fn new(initial_state: S, command_sender: CS, context: CTX) -> Self {
+//         let mut states = HashMap::<S, Box<dyn Stateful<S, C, CS, CTX>>>::new();
+//         Self {
+//             states: states,
+//             current_state: initial_state,
+//             command_sender: command_sender,
+//             context: context
+//         }
+//     }
+//     pub fn add_state(&mut self, s: S, state: Box<dyn Stateful<S, C, CS, CTX>>) {
+//         self.states.insert(s, state);
+//     }
 
-    fn process_event(&mut self, event: &Message) {
-        let state = self.states.get_mut(&self.current_state);
+//     fn process_event(&mut self, event: &Message) {
+//         let state = self.states.get_mut(&self.current_state);
 
-        if let Some(st) = state {
-            match st.on_event(&self.command_sender, event, &mut self.context) {
-                Response::Handled => {}
-                Response::Transition(s) => {
-                    if s != self.current_state {
-                        st.on_exit(&mut self.context);
-                        self.current_state = s;
-                        loop {
-                            log::info!("StateMachine : {:?} - {:?}", self.current_state, event);
-                            if let Some(s) = self.states.get_mut(&self.current_state) {
-                                match s.on_enter(&self.command_sender, &mut self.context) {
-                                    Response::Handled => {
-                                        break;
-                                    }
-                                    Response::Transition(s) => {
-                                        if s == self.current_state {
-                                            break;
-                                        } else {
-                                            self.current_state = s;
-                                        }
-                                    }
-                                }
-                            }
-                            else{
-                                log::warn!("Failed to find state : {:?}", self.current_state);
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    // pub fn on_enter(&mut self) {
-    //     if let Some(state) = self.states.get_mut(&self.current_state){
-    //         state.on_enter();
-    //     }
-    // }
-    // pub fn on_exit(&mut self) {
-    //     if let Some(state) = self.states.get_mut(&self.current_state){
-    //         state.on_exit();
-    //     }
-    // }
-}
+//         if let Some(st) = state {
+//             match st.on_event(&self.command_sender, event, &mut self.context) {
+//                 Response::Handled => {}
+//                 Response::Transition(s) => {
+//                     if s != self.current_state {
+//                         st.on_exit(&mut self.context);
+//                         self.current_state = s;
+//                         loop {
+//                             log::info!("StateMachine : {:?} - {:?}", self.current_state, event);
+//                             if let Some(s) = self.states.get_mut(&self.current_state) {
+//                                 match s.on_enter(&self.command_sender, &mut self.context) {
+//                                     Response::Handled => {
+//                                         break;
+//                                     }
+//                                     Response::Transition(s) => {
+//                                         if s == self.current_state {
+//                                             break;
+//                                         } else {
+//                                             self.current_state = s;
+//                                         }
+//                                     }
+//                                 }
+//                             }
+//                             else{
+//                                 log::warn!("Failed to find state : {:?}", self.current_state);
+//                                 break;
+//                             }
+//                         }
+//                     }
+//                 }
+//             }
+//         }
+//     }
+//     // pub fn on_enter(&mut self) {
+//     //     if let Some(state) = self.states.get_mut(&self.current_state){
+//     //         state.on_enter();
+//     //     }
+//     // }
+//     // pub fn on_exit(&mut self) {
+//     //     if let Some(state) = self.states.get_mut(&self.current_state){
+//     //         state.on_exit();
+//     //     }
+//     // }
+// }
 
 
 #[derive(Debug)]
