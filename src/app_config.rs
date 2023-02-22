@@ -1,6 +1,7 @@
 use std::{sync::RwLock, net::Ipv6Addr};
 
 use crate::{lbp_functions::{TEapPskKey}, adp::{TAdpBand, self, TExtendedAddress}};
+use clap::{ValueEnum, builder::PossibleValue};
 use config::Config;
 use num_enum::IntoPrimitive;
 use num_enum::TryFromPrimitive;
@@ -12,12 +13,46 @@ use crate::network_manager::NetworkManager;
 
 
 
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ArgEnum, Debug, 
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, 
     TryFromPrimitive, IntoPrimitive, Deserialize)]
 #[repr(u8)]
 pub enum Mode{
     Coordinator = 0u8,
     Modem
+}
+
+impl ValueEnum for Mode {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[Mode::Coordinator, Mode::Modem]
+    }
+
+    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
+        Some(match self {
+            Mode::Coordinator => PossibleValue::new("coord").help("Run coordinator mode"),
+            Mode::Modem => PossibleValue::new("modem").help("Run modem mode"),
+        })
+    }
+}
+impl std::fmt::Display for Mode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.to_possible_value()
+            .expect("no values are skipped")
+            .get_name()
+            .fmt(f)
+    }
+}
+
+impl std::str::FromStr for Mode {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        for variant in Self::value_variants() {
+            if variant.to_possible_value().unwrap().matches(s, false) {
+                return Ok(*variant);
+            }
+        }
+        Err(format!("invalid variant: {}", s))
+    }
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]

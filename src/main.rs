@@ -31,7 +31,7 @@ extern crate log;
 extern crate env_logger;
 
 use log::Level;
-use clap::{ArgEnum, Parser};
+use clap::{arg, builder::PossibleValue, command, value_parser, ValueEnum, Parser};
 
 
 use crate::app_config::Mode;
@@ -45,7 +45,6 @@ const TIMER_RESOLUTION: Duration = Duration::from_millis(20000);
 #[clap(author, version, about, long_about = None)]
 struct Cli {
     /// What mode to run the program in
-    #[clap(arg_enum)]
     mode: app_config::Mode,
 
     #[clap(short, long)]

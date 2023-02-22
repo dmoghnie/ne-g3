@@ -2,16 +2,14 @@ use std::borrow::BorrowMut;
 
 
 use aes::Aes128;
-use aes::NewBlockCipher;
-use cmac::{Cmac, Mac, NewMac};
+use aes::cipher::generic_array::GenericArray;
+use eax::KeyInit;
+use eax::aead::Aead;
+use eax::aead::Payload;
 use rand::Rng;
 use rand::thread_rng;
 use std::fmt::Debug;
 
-use eax::aead::{AeadMut, Payload};
-use eax::aead::generic_array::GenericArray;
-
-use eax::{Eax, NewAead};
 
 
 
@@ -290,7 +288,7 @@ pub fn eap_psk_encode_message2(
         // compute first MacP = CMAC-AES-128(AK, IdP||IdS||RandS||RandP)
         let mut au8Seed: Vec<u8> = Vec::new();
 
-        let mut mac = Cmac::<aes::Aes128>::new_from_slice(&p_psk_context.m_Ak.0).unwrap();
+        let mut mac = cmac::Cmac::<aes::Aes128>::new_from_slice(&p_psk_context.m_Ak.0).unwrap();
 
         //   ret = cipher_wrapper_cipher_setup( &m_ctx, cipher_info );
         //   LOG_DBG(Log("\n cipher_wrapper_cipher_setup returned %d %d", ret, m_ctx.cipher_info->type));
@@ -298,9 +296,10 @@ pub fn eap_psk_encode_message2(
         au8Seed.append(&mut p_id_s.0.to_vec());
         au8Seed.append(&mut p_rand_s.0.to_vec());
         au8Seed.append(&mut p_rand_p.0.to_vec());
-        mac.update(&au8Seed);
+        cmac::digest::Update::update(&mut mac, &au8Seed);
+        
 
-        let au8_mac_p = mac.finalize();
+        let au8_mac_p = cmac::Mac::finalize(mac);
         // encode the EAP header; length field will be set at the end of the block
         p_memory_buffer.push(EAP_RESPONSE);
         p_memory_buffer.push(p_u8_identifier);
@@ -342,12 +341,14 @@ pub fn eap_psk_decode_message3(
         // verify MacS: MAC_S = CMAC-AES-128(AK, IdS||RandP)
         let mut au8_seed: Vec<u8> = Vec::new();
 
-        let mut mac = Cmac::<aes::Aes128>::new_from_slice(&p_psk_context.m_Ak.0).unwrap();
+        let mut mac = cmac::Cmac::<aes::Aes128>::new_from_slice(&p_psk_context.m_Ak.0).unwrap();
 
         au8_seed.extend_from_slice(&p_psk_context.m_IdS.0);
         au8_seed.extend_from_slice(&p_psk_context.m_RandP.0);
-        mac.update(&au8_seed);
-        let au8_mac_s = mac.finalize().into_bytes().to_vec();
+
+        cmac::digest::Update::update(&mut mac, &au8_seed);
+
+        let au8_mac_s = cmac::Mac::finalize(mac).into_bytes().to_vec();
 
         if au8_mac_s == mac_s {
             let key = eax::aead::generic_array::GenericArray::from_slice(&p_psk_context.m_Tek.0);
@@ -520,9 +521,9 @@ pub fn eap_psk_decode_message2(
     au8_seed.extend_from_slice(&p_rand_s.0);
     au8_seed.extend_from_slice(&p_rand_p.0);
 
-    let mut mac = Cmac::<aes::Aes128>::new_from_slice(&p_psk_context.m_Ak.0).unwrap();
-    mac.update(&au8_seed);
-    let au8_expected_mac_p = mac.finalize();
+    let mut mac = cmac::Cmac::<aes::Aes128>::new_from_slice(&p_psk_context.m_Ak.0).unwrap();
+    cmac::digest::Update::update(&mut mac, &au8_seed);
+    let au8_expected_mac_p = cmac::Mac::finalize(mac);
     return  au8_expected_mac_p.into_bytes().to_vec() == au8_mac_p.to_vec();
 }
 
@@ -541,14 +542,14 @@ pub fn EAP_PSK_Encode_Message3(
     u8PChannelResult: u8,
     pPChannelData: &[u8],    
 ) -> Option<Vec<u8>> {
-    let mut mac = Cmac::<aes::Aes128>::new_from_slice(&pPskContext.m_Ak.0).unwrap();
+    let mut mac = cmac::Cmac::<aes::Aes128>::new_from_slice(&pPskContext.m_Ak.0).unwrap();
     let mut au8Seed: Vec<u8> = Vec::new();
     au8Seed.append(pIds.0.to_vec().borrow_mut());
     au8Seed.append(pRandP.0.to_vec().borrow_mut());
 
-    mac.update(&au8Seed);
+    cmac::digest::Update::update(&mut mac, &au8Seed);
 
-    let au8MacS = mac.finalize();
+    let au8MacS = cmac::Mac::finalize(mac);
     let auMacSLen = au8MacS.clone().into_bytes().len();
 
     let mut header: Vec<u8> = Vec::new();

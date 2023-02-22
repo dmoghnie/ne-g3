@@ -19,11 +19,11 @@ clap = { version = "4.1.6", features = ["derive"] }
 thiserror="1.0.31"
 lazy_static = "1.4.0"
 
-aes = { version = "0.7.5", features = ["force-soft"] }
-eax = "0.4.1"
+aes = { version = "~0.8" }
+eax = "~0.5"
 # aes = "*"
 # eax = "*"
-cmac = "0.6.0"
+cmac = "~0.7"
 
 rand = "*"
 config = "*"
