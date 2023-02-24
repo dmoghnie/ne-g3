@@ -28,7 +28,7 @@ impl ValueEnum for Mode {
 
     fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
         Some(match self {
-            Mode::Coordinator => PossibleValue::new("coord").help("Run coordinator mode"),
+            Mode::Coordinator => PossibleValue::new("coordinator").help("Run coordinator mode"),
             Mode::Modem => PossibleValue::new("modem").help("Run modem mode"),
         })
     }
