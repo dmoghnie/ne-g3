@@ -6,6 +6,10 @@ use aes::cipher::generic_array::GenericArray;
 use eax::KeyInit;
 use eax::aead::Aead;
 use eax::aead::Payload;
+use aes::cipher::generic_array::GenericArray;
+use eax::KeyInit;
+use eax::aead::Aead;
+use eax::aead::Payload;
 use rand::Rng;
 use rand::thread_rng;
 use std::fmt::Debug;
@@ -211,6 +215,7 @@ pub fn eap_psk_initialize(pKey: &TEapPskKey, pPskContext: &mut TEapPskContext) -
 
 pub fn eap_psk_initialize_tek(p_rand_p: &TEapPskRand, p_psk_context: &mut TEapPskContext) -> bool {
     log::info!("->EAP_PSK_InitializeTEK : {:?}, {:?}", p_rand_p, p_psk_context.m_Kdk.0);
+    
     let encryptor = aes::Aes128::new_from_slice(&p_psk_context.m_Kdk.0);
     if let Ok(encryptor) = encryptor {
         let mut v = aes::cipher::generic_array::GenericArray::from(p_rand_p.0);
@@ -345,11 +350,9 @@ pub fn eap_psk_decode_message3(
 
         au8_seed.extend_from_slice(&p_psk_context.m_IdS.0);
         au8_seed.extend_from_slice(&p_psk_context.m_RandP.0);
-
         cmac::digest::Update::update(&mut mac, &au8_seed);
-
         let au8_mac_s = cmac::Mac::finalize(mac).into_bytes().to_vec();
-
+    
         if au8_mac_s == mac_s {
             let key = eax::aead::generic_array::GenericArray::from_slice(&p_psk_context.m_Tek.0);
             let p_nonce = &p_message[32..36];

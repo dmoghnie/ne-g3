@@ -1,5 +1,7 @@
 use std::collections::VecDeque;
 
+use nefsm::{Stateful, Response};
+
 use crate::{
     adp,
     app_config::{self, G3ParamType},
@@ -7,7 +9,7 @@ use crate::{
     usi,
 };
 
-use super::{Context, Message, Response, State, Stateful};
+use super::{Context, Message, State};
 
 pub struct SetParams {
     params: Option<VecDeque<app_config::G3Param>>,
@@ -182,26 +184,24 @@ impl SetParams {
     }
 }
 
-impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for SetParams {
+impl Stateful<State, Context, Message> for SetParams {
     fn on_enter(
         &mut self,
-        cs: &flume::Sender<usi::Message>,
         context: &mut Context,
     ) -> Response<State> {
         log::info!("State : SetParams - onEnter");
         self.init_params(context);
-        self.send_next_param(cs);
+        self.send_next_param(&context.usi_tx);
         Response::Handled
     }
 
     fn on_event(
         &mut self,
-        cs: &flume::Sender<usi::Message>,
         event: &Message,
         context: &mut Context,
     ) -> Response<State> {
         log::trace!("SetParams : {:?}", event);
-        if self.send_next_param(cs) {
+        if self.send_next_param(&context.usi_tx) {
             Response::Handled
         } else {
             Response::Transition(State::GetParams)

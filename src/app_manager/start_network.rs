@@ -1,6 +1,8 @@
+use nefsm::{Stateful, Response};
+
 use crate::{usi, app_config, request, adp::{AdpG3NetworkStartResponse, self, EAdpStatus}};
 
-use super::{State, Stateful, Context, Response, Message};
+use super::{State, Context, Message};
 
 pub struct StartNetwork {
    
@@ -14,15 +16,14 @@ impl StartNetwork {
     }
 }
 
-impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for StartNetwork {
+impl Stateful<State, Context, Message> for StartNetwork {
     fn on_enter(
         &mut self,
-        cs: &flume::Sender<usi::Message>,
         context: &mut Context,
     ) -> Response<State> {
         log::info!("State : StartNetwork - onEnter : context {:?}", context);
         let cmd = request::AdpNetworkStartRequest::new(context.settings.g3.pan_id);
-        if let Err(e) = cs.send(usi::Message::UsiOut(cmd.into())) {
+        if let Err(e) = context.usi_tx.send(usi::Message::UsiOut(cmd.into())) {
             log::warn!("Failed to send network start request {}", e);
         }
         Response::Handled
@@ -30,7 +31,6 @@ impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for Sta
 
     fn on_event(
         &mut self,
-        cs: &flume::Sender<usi::Message>,
         event: &Message,
         context: &mut Context,
     ) -> Response<State> {

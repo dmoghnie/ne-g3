@@ -1,10 +1,11 @@
 use crate::{app_config, usi, request::{AdpSetRequest, AdpInitializeRequest, self}, app_manager::Idle, adp::{self, TAdpBand}};
 
+use nefsm::{Stateful, Response};
 use num_enum::IntoPrimitive;
 use num_enum::TryFromPrimitive;
 
 
-use super::{Stateful, Response, State, Message, Context};
+use super::{State, Message, Context};
 
 pub struct StackInitialize {
 
@@ -20,12 +21,12 @@ impl StackInitialize {
     
 }
 
-impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for StackInitialize {
-    fn on_enter(&mut self, cs: &flume::Sender<usi::Message>, context: &mut Context) -> Response<State> {
+impl Stateful<State, Context, Message> for StackInitialize {
+    fn on_enter(&mut self, context: &mut Context) -> Response<State> {
         log::info!("State : StackInitialize - onEnter - coordinator : {}", context.is_coordinator);
         let band = TAdpBand::try_from_primitive(context.settings.g3.band).unwrap();
         let request = request::AdpInitializeRequest::from_band(&band);
-        match cs.send(usi::Message::UsiOut(request.into())) {
+        match context.usi_tx.send(usi::Message::UsiOut(request.into())) {
             Ok(_) => {
                 Response::Handled
             },
@@ -36,7 +37,7 @@ impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for Sta
         }        
     }
 
-    fn on_event(&mut self, cs: &flume::Sender<usi::Message>, event: &Message, context: &mut Context) -> Response<State> {
+    fn on_event(&mut self, event: &Message, context: &mut Context) -> Response<State> {
         log::trace!("StackInitialize : {:?}", event);
         match event {
             Message::Adp(adp) => {

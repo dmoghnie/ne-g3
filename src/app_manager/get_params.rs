@@ -1,6 +1,7 @@
 use crate::{usi, app_config, request::{AdpMacGetRequest, AdpSetRequest}, adp::{EMacWrpPibAttribute, G3_SERIAL_MSG_MAC_GET_CONFIRM, self, TExtendedAddress, ipv6_prefix}};
 
-use super::{State, Stateful, Context, Response, Message};
+use super::{State, Context, Message};
+use nefsm::{Stateful, Response};
 use num_enum::TryFromPrimitive;
 
 pub struct GetParams {
@@ -15,21 +16,19 @@ impl GetParams {
     }
 }
 
-impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for GetParams {
+impl Stateful<State, Context, Message> for GetParams {
     fn on_enter(
-        &mut self,
-        cs: &flume::Sender<usi::Message>,
+        &mut self,        
         context: &mut Context,
     ) -> Response<State> {
         log::info!("State : GetParams - onEnter");
         let request = AdpMacGetRequest::new (EMacWrpPibAttribute::MAC_WRP_PIB_MANUF_EXTENDED_ADDRESS, 0);
-        cs.send(usi::Message::UsiOut(request.into()));
+        context.usi_tx.send(usi::Message::UsiOut(request.into()));
         Response::Handled
     }
 
     fn on_event(
         &mut self,
-        cs: &flume::Sender<usi::Message>,
         event: &Message,
         context: &mut Context,
     ) -> Response<State> {
@@ -55,7 +54,7 @@ impl Stateful<State, usi::Message, flume::Sender<usi::Message>, Context> for Get
                                         unsafe {
                                             let v = v6prefix.to_raw_data().to_vec();
                                             let request = AdpSetRequest::new (adp::EAdpPibAttribute::ADP_IB_PREFIX_TABLE, 0, &v);
-                                            cs.send(usi::Message::UsiOut(request.into()));
+                                            context.usi_tx.send(usi::Message::UsiOut(request.into()));
                                         }
                                        }
                                     },
