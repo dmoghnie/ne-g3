@@ -21,15 +21,15 @@ lazy_static = "1.4.0"
 
 aes = { version = "~0.8" }
 eax = "~0.5"
-# aes = "*"
-# eax = "*"
 cmac = "~0.7"
 
-rand = "*"
-config = "*"
-serde = "*"
-serde_derive = "*"
-byteorder = "1.4.3"
+rand = "^0.8"
+config = "^0.13"
+serde = "^1.0"
+serde_derive = "^1.0"
+byteorder = "^1.4"
+
+nefsm = "0.1.0"
 
 # tun-tap = {path="../../libs/tuntap"}
 pnet_packet = "*"
