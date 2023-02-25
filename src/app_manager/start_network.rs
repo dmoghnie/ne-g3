@@ -16,7 +16,7 @@ impl StartNetwork {
     }
 }
 
-impl Stateful<State, Context, Message<'_>> for StartNetwork {
+impl Stateful<State, Context, Message> for StartNetwork {
     fn on_enter(
         &mut self,
         context: &mut Context,

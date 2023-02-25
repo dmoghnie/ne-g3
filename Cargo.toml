@@ -15,7 +15,7 @@ num_enum = "0.5.7"
 # crossbeam = "0.8.1"
 # crossbeam-channel = "0.5.4"
 flume = "0.10.13"
-clap = { version = "4.1.6", features = ["derive"] }
+clap = { version = "3.2.15", features = ["derive"] }
 thiserror="1.0.31"
 lazy_static = "1.4.0"
 
@@ -32,9 +32,7 @@ serde = "^1.0"
 serde_derive = "^1.0"
 byteorder = "^1.4"
 
-# nefsm ={ git = "https://github.com/dmoghnie/ne-fsm.git"}
-nefsm = {path = "../libs/ne-fsm/nefsm"}
-nefsm_macro = {path = "../libs/ne-fsm/macro"}
+nefsm = "0.1.0"
 
 # tun-tap = {path="../../libs/tuntap"}
 pnet_packet = "*"

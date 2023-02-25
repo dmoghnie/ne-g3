@@ -16,7 +16,7 @@ impl JoinNetwork {
     }
 }
 
-impl Stateful<State, Context, Message<'_>> for JoinNetwork {
+impl Stateful<State, Context, Message> for JoinNetwork {
     fn on_enter(
         &mut self,
         context: &mut Context,

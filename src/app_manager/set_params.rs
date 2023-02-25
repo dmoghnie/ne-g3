@@ -184,7 +184,7 @@ impl SetParams {
     }
 }
 
-impl Stateful<State, Context, Message<'_>> for SetParams {
+impl Stateful<State, Context, Message> for SetParams {
     fn on_enter(
         &mut self,
         context: &mut Context,

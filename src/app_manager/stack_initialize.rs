@@ -21,7 +21,7 @@ impl StackInitialize {
     
 }
 
-impl Stateful<State, Context, Message<'_>> for StackInitialize {
+impl Stateful<State, Context, Message> for StackInitialize {
     fn on_enter(&mut self, context: &mut Context) -> Response<State> {
         log::info!("State : StackInitialize - onEnter - coordinator : {}", context.is_coordinator);
         let band = TAdpBand::try_from_primitive(context.settings.g3.band).unwrap();

@@ -6,7 +6,7 @@ use super::{State, Context, Message};
 
 
 pub struct DiscoverNetwork {}
-impl Stateful<State, Context, Message<'_>> for DiscoverNetwork {
+impl Stateful<State, Context, Message> for DiscoverNetwork {
     fn on_enter(&mut self, context: &mut Context) -> Response<State> {
 
         log::info!("State : DiscoverNetwork - onEnter : context {:?}", context);

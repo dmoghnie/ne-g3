@@ -6,7 +6,7 @@ use super::{State, Context, Message};
 
 
 pub struct JoinNetworkFailed {}
-impl Stateful<State, Context, Message<'_>> for JoinNetworkFailed {
+impl Stateful<State, Context, Message> for JoinNetworkFailed {
     fn on_enter(&mut self, context: &mut Context) -> Response<State> {
         
         Response::Handled

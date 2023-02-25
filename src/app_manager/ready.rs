@@ -18,7 +18,7 @@ impl Ready {
     
 }
 
-impl Stateful<State, Context, Message<'_>> for Ready {
+impl Stateful<State, Context, Message> for Ready {
     fn on_enter(&mut self, context: &mut Context) -> Response<State> {
         log::info!("State : Ready - onEnter");
         Response::Handled

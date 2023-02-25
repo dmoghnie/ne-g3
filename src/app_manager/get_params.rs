@@ -16,7 +16,7 @@ impl GetParams {
     }
 }
 
-impl Stateful<State, Context, Message<'_>> for GetParams {
+impl Stateful<State, Context, Message> for GetParams {
     fn on_enter(
         &mut self,        
         context: &mut Context,

@@ -7,7 +7,7 @@ use super::{State, Context, Message};
 
 
 pub struct SetCoordShortAddr {}
-impl Stateful<State, Context, Message<'_>> for SetCoordShortAddr {
+impl Stateful<State, Context, Message> for SetCoordShortAddr {
     fn on_enter(&mut self, context: &mut Context) -> Response<State> {
 
         // let short_addr: u16 = rand::thread_rng().gen();
