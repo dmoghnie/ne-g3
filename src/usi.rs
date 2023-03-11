@@ -30,7 +30,7 @@ pub trait MessageHandler {
 }
 
 #[derive(Clone, Debug)]
-enum RxState {
+pub enum RxState {
     RxIdle, // Inactive
     RxMsg,  // Receiving message
     RxEsc,  // Processing escape char

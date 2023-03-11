@@ -6,12 +6,14 @@ use std::{
     process::Command,
     sync::{atomic::AtomicBool, Arc},
     thread::{self, sleep, sleep_ms},
-    time::Duration,
+    time::{Duration, Instant},
     vec,
 };
 
 use byteorder::{NativeEndian, WriteBytesExt, NetworkEndian};
 use config::Config;
+use env_logger::fmt::Timestamp;
+use neutils::fair_queue::{self, FairQueue};
 use pnet_packet::{
     ipv4::{Ipv4Flags, Ipv4Packet, MutableIpv4Packet},
     ipv6::{Ipv6Packet, MutableIpv6Packet},
@@ -22,6 +24,7 @@ use crate::{app_config, tun_interface::TunInterface, adp::{TExtendedAddress, EAd
 use std::sync::atomic::Ordering;
 use crate::ipv6_frag_manager;
 use crate::request;
+use crate::packet_utils::PacketUtils;
 
 
 use crate::{
@@ -32,18 +35,7 @@ use crate::{
 
 use rand::Rng;
 
-enum PacketProtocol {
-    IPv4,
-    IPv6,
-    Other(u8),
-}
-fn infer_proto(buf: &[u8]) -> PacketProtocol {
-    match buf[0] >> 4 {
-        4 => PacketProtocol::IPv4,
-        6 => PacketProtocol::IPv6,
-        p => PacketProtocol::Other(p),
-    }
-}
+
 fn cmd(program: &str, cmd: &str, args: &[&str]) {
     let ecode = Command::new(program)
         .args(args)
@@ -57,6 +49,7 @@ fn cmd(program: &str, cmd: &str, args: &[&str]) {
 #[derive(Debug)]
 enum TunPayload {
     Data(Vec<u8>),
+    FairQueuePacket(fair_queue::Packet),
     Stop,
     Error(()), //TODO
 }
@@ -77,11 +70,8 @@ impl TunDevice {
     
     pub fn start(self, buffers_available: Arc<AtomicBool>, settings: &app_config::Settings, short_addr: u16, 
         mut rx: flume::Receiver<TunPayload>, extended_addr: &Option<TExtendedAddress>) {
-        use std::{thread::sleep, time::Duration, io::Read, io::Write};
 
 
-        /*fd00:0:2:781d:1122:3344:5566:1 */
-        
         let local_link = app_config::local_ipv6_add_from_pan_id_short_addr(&settings.network.local_net_prefix, settings.g3.pan_id, short_addr).unwrap();
         let mut ula: Option<Ipv6Addr> = None;
         ula = app_config::ula_ipv6_addr_from_pan_id_short_addr(&settings.network.ula_net_prefix, 
@@ -154,32 +144,27 @@ impl TunDevice {
                     Ok(size) => {
                         log::info!("tun received {} bytes", size);
                         if size > 0 && buffers_available.load(Ordering::SeqCst){
-                            match infer_proto(&buf[skip..]) {
-                                PacketProtocol::IPv4 => {
+                            match PacketUtils::infer_proto(&buf[skip..]) {
+                                PacketUtils::PacketProtocol::IPv4 => {
                                     log::warn!("Protocol IPV4 not implemented yet");
                                 }
-                                PacketProtocol::IPv6 => {
-                                    // let packet = Ipv6Packet::new(&buf[..size])
-                                    // .unwrap();
-                                    // let pkts = ipv6_frag_manager::fragment_packet(packet, 1280);
-                                    // log::info!("Tun message fragmented into {} packets ", pkts.len());
-                                    // for pkt in pkts{
-                                        log::trace!("--> tun {:?}", buf);
-                                        match self.listener.send(
-                                            TunPayload::Data(buf[skip..size].to_vec())) {
-                                            Ok(_) => {}
-                                            Err(e) => {
-                                                log::warn!(
-                                                    "failed to send TunMessage to listener {}",
-                                                    e
-                                                )
-                                            }
+                                PacketUtils::PacketProtocol::IPv6 => {
+                                    let packet = Ipv6Packet::new(&buf[..size])
+                                    .unwrap();
+                                    let fq_packet = fair_queue::Packet {destination: packet.get_destination().to_string(), 
+                                            data: buf[skip..size].to_vec(), timestamp: Instant::now(), dequeue_time: None};
+                                    match self.listener.send(TunPayload::FairQueuePacket(fq_packet)) {
+                                        Ok(_) => {}
+                                        Err(e) => {
+                                            log::warn!(
+                                                "failed to send TunMessage to listener {}",
+                                                e
+                                            )
                                         }
-                                        // sleep(Duration::from_millis(10));
-                                    // }
+                                    }                                
 
                                 }
-                                PacketProtocol::Other(_) => {}
+                                PacketUtils::PacketProtocol::Other(_) => {}
                             }
                         }
                     }
@@ -211,6 +196,10 @@ impl TunDevice {
                             TunPayload::Error(_) => {
                                 log::warn!("Tun payload error");
                             }
+                            TunPayload::FairQueuePacket(_) => {
+                                log::warn!("Tun interface received a fairqueue packet to forward, 
+                                    this should not happend, since fairqueue is for the G3 side only")
+                            },
                         }
                         // socket.send_slice(tun_msg.get_payload())
                     }
@@ -327,6 +316,8 @@ impl <'a> NetworkManager {
         let mut extended_addr :Option<TExtendedAddress> =  None;
 
         let settings = settings.clone();
+        let mut fair_queue = FairQueue::new(Duration::from_secs(30), 
+            Duration::from_secs(30));
 
         thread::spawn(move || {
 
@@ -460,41 +451,42 @@ impl <'a> NetworkManager {
                     }
                     Err(_) => {}
                 }
-                 if self.buffers_available.load(Ordering::SeqCst) {
-                    match tun_rx.try_recv() {
-                        Ok(msg) => {
-                            match msg {
-                                TunPayload::Data(pkt) => {
-
-                                    let data_request = AdpDataRequest::new(
-                                        rand::thread_rng().gen(),
-                                        &pkt,
-                                        true,
-                                        0,
-                                    );
-                                    
-                                    match self.cmd_tx.send(usi::Message::UsiOut(data_request.into())) {
-                                        Ok(_) => {log::info!("Send to usi ")},
-                                        Err(e) => {log::warn!("Failed to send to usi {}", e)},
-                                    }
-                                    //     }
-                                    // }
-                                    
-                                    
-                                }
-                                TunPayload::Stop => { //Should we use this as a notification that the device is stopped or should we have a separate message
-                                }
-                                TunPayload::Error(e) => {
-                                    log::info!("Received error from device");
-                                }
+                match tun_rx.try_recv() {
+                    Ok(msg) => {
+                        match msg {
+                            TunPayload::Data(pkt) => {                                
+                                log::warn!("tun interface should be sending us fair_queue::Packet to forward to G3");
+                            }
+                            TunPayload::FairQueuePacket(pkt) => {
+                                fair_queue.enqueue(pkt);
+                            }
+                            TunPayload::Stop => { //Should we use this as a notification that the device is stopped or should we have a separate message
+                            }
+                            TunPayload::Error(e) => {
+                                log::info!("Received error from device");
                             }
                         }
-                        Err(_) => {}
                     }
+                    Err(_) => {}
+                }
 
-                 }
-                 else {
-                    // tun_rx.drain();
+                while self.buffers_available.load(Ordering::SeqCst) {
+                    if let Some(packet) = fair_queue.dequeue() {
+                        let data_request = AdpDataRequest::new(
+                            rand::thread_rng().gen(),
+                            &packet.data,
+                            true,
+                            0,
+                        );
+                        
+                        match self.cmd_tx.send(usi::Message::UsiOut(data_request.into())) {
+                            Ok(_) => {log::info!("Send to usi ")},
+                            Err(e) => {log::warn!("Failed to send to usi {}", e)},
+                        }
+                    }
+                    else{
+                        break;
+                    }
                 }
                 sleep(Duration::from_millis(10)); //TODO, spin threads and recv instead of try_recv
             }

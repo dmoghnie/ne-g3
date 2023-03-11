@@ -12,6 +12,7 @@ mod request;
 mod usi;
 mod tun_interface;
 mod app_manager;
+mod packet_utils;
 
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
