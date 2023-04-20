@@ -1,7 +1,7 @@
 use crate::{usi, app_config, request::{AdpMacGetRequest, AdpSetRequest}, adp::{EMacWrpPibAttribute, G3_SERIAL_MSG_MAC_GET_CONFIRM, self, TExtendedAddress, ipv6_prefix}};
 
 use super::{State, Context, Message};
-use nefsm::{Stateful, Response};
+use nefsm::sync::{Stateful, Response};
 use num_enum::TryFromPrimitive;
 
 pub struct GetParams {
