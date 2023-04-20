@@ -1,6 +1,6 @@
 use crate::{app_config, usi, request::{AdpSetRequest, AdpInitializeRequest, self}, app_manager::Idle, adp::{self, TAdpBand}};
 
-use nefsm::{Stateful, Response};
+use nefsm::sync::{Stateful, Response};
 use num_enum::IntoPrimitive;
 use num_enum::TryFromPrimitive;
 

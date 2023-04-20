@@ -16,8 +16,8 @@ num_enum = "0.5.7"
 # crossbeam-channel = "0.5.4"
 flume = "0.10.13"
 clap = { version = "4.1.6", features = ["derive"] }
-thiserror="1.0.31"
 lazy_static = "1.4.0"
+anyhow = "1.0.69"
 
 aes = { version = "~0.8" }
 eax = "~0.5"
@@ -36,7 +36,11 @@ neutils = {path = "../libs/ne-utils/neutils"}
 # tun-tap = {path="../../libs/tuntap"}
 pnet_packet = "*"
 libc = "0.2"
-# stateful = {git="https://github.com/mdeloof/stateful.git"}
+
+actix-web = {version = "4.3"}
+actix-cors = "0.6.4"
+
+tokio = { version = "1.17.0", features = ["rt-multi-thread", "macros", "time"] }
 
 [build-dependencies]
 cc = "~1"

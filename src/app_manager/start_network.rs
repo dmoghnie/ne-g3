@@ -1,4 +1,4 @@
-use nefsm::{Stateful, Response};
+use nefsm::sync::{Stateful, Response};
 
 use crate::{usi, app_config, request, adp::{AdpG3NetworkStartResponse, self, EAdpStatus}};
 

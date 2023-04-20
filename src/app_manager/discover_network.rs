@@ -1,4 +1,4 @@
-use nefsm::{Stateful, Response};
+use nefsm::sync::{Stateful, Response};
 
 use crate::{usi, request::{AdpSetRequest, self}, adp::{EAdpPibAttribute, self, EAdpStatus}};
 

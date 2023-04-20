@@ -11,7 +11,7 @@ use std::time::SystemTime;
 
 use flume;
 use flume::SendError;
-use nefsm::StateMachine;
+use nefsm::sync::StateMachine;
 use serialport::new;
 
 use crate::adp;
@@ -49,7 +49,7 @@ pub mod join_network_failed;
 pub mod discover_network;
 pub mod network_discover_failed;
 
-use nefsm::{Stateful, FsmEnum};
+use nefsm::sync::{Stateful, FsmEnum};
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
 pub enum State {
@@ -142,7 +142,7 @@ impl <'a>AppManager {
                 StateMachine::<State, Context, Message>::new(
                     Context { is_coordinator, extended_addr: None, 
                         settings: settings, pan_descriptors: Vec::new(), usi_tx: self.usi_tx.clone() }
-                );
+                , None);
         thread::spawn(move || {
             
                 state_machine.init(State::Idle);
