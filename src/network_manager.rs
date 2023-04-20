@@ -49,7 +49,7 @@ fn cmd(program: &str, cmd: &str, args: &[&str]) {
 #[derive(Debug)]
 enum TunPayload {
     Data(Vec<u8>),
-    FairQueuePacket(fair_queue::Packet),
+    FairQueuePacket(fair_queue::Data),
     Stop,
     Error(()), //TODO
 }
@@ -151,7 +151,7 @@ impl TunDevice {
                                 PacketUtils::PacketProtocol::IPv6 => {
                                     let packet = Ipv6Packet::new(&buf[..size])
                                     .unwrap();
-                                    let fq_packet = fair_queue::Packet {destination: packet.get_destination().to_string(), 
+                                    let fq_packet = fair_queue::Data {id: packet.get_destination().to_string(), 
                                             data: buf[skip..size].to_vec(), timestamp: Instant::now(), dequeue_time: None};
                                     match self.listener.send(TunPayload::FairQueuePacket(fq_packet)) {
                                         Ok(_) => {}
